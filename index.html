@@ -616,6 +616,24 @@
   /* ---------------- speech ---------------- */
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec=null, heard="", pending=null, listening=false;
+  var wantVoice=false, committed="", runFinal="", restarts=0;
+  var isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent||"");
+
+  /* Mobile engines sometimes re-report a phrase they already finalised, which
+     compounds into "the problem the problem the problem". Collapse any run that
+     is an immediate repeat of the run before it. */
+  function dedupe(t){
+    var w=(t||"").split(/\s+/).filter(Boolean), changed=true;
+    while(changed){
+      changed=false;
+      for(var k=Math.min(12,Math.floor(w.length/2)); k>=2; k--){
+        var tail=w.slice(-k).join(" ").toLowerCase();
+        var prev=w.slice(-2*k,-k).join(" ").toLowerCase();
+        if(tail && tail===prev){ w.splice(-k,k); changed=true; break; }
+      }
+    }
+    return w.join(" ");
+  }
 
   if(!SR){
     voiceMode=false;
@@ -649,38 +667,78 @@
 
   function buildRec(){
     var r=new SR();
-    r.continuous=true; r.interimResults=true; r.lang="en-US";
-    r.onresult=function(ev){
-      var fin="", inter="";
-      for(var i=ev.resultIndex;i<ev.results.length;i++){
-        var chunk=ev.results[i][0].transcript;
-        if(ev.results[i].isFinal) fin+=chunk; else inter+=chunk;
-      }
-      if(fin) heard+=fin;
-      capTxt.textContent=(heard+inter).trim();
+    /* Mobile Chrome ignores continuous mode and ends after a pause, so ask for
+       single utterances there and restart as long as the finger is still down. */
+    r.continuous=!isMobile;
+    r.interimResults=true;
+    r.maxAlternatives=1;
+    r.lang="en-US";
+
+    r.onstart=function(){
+      listening=true;
+      recLabel.textContent="Recording";
     };
+
+    r.onresult=function(ev){
+      /* Rebuild from the whole result list rather than appending deltas —
+         appending is what turns a re-reported phrase into a duplicate. */
+      var fin="", inter="";
+      for(var i=0;i<ev.results.length;i++){
+        var chunk=ev.results[i][0].transcript;
+        if(ev.results[i].isFinal) fin+=chunk+" "; else inter+=chunk+" ";
+      }
+      runFinal=fin;
+      heard=dedupe((committed+" "+fin).trim());
+      capTxt.textContent=dedupe((heard+" "+inter).trim());
+    };
+
     r.onerror=function(ev){
       if(ev.error==="not-allowed"||ev.error==="service-not-allowed"){
-        voiceMode=false;
+        voiceMode=false; wantVoice=false;
         recLabel.textContent="Mic unavailable";
+      } else if(ev.error==="network"){
+        recLabel.textContent="No connection to the speech service";
+      } else if(ev.error==="no-speech"){
+        recLabel.textContent="Didn't catch that \u2014 keep talking";
       }
     };
-    r.onend=function(){ listening=false; if(pending) finish(); };
+
+    r.onend=function(){
+      listening=false;
+      committed=dedupe((committed+" "+runFinal).trim());
+      runFinal="";
+      heard=committed;
+
+      if(wantVoice && restarts<60){
+        restarts++;
+        try{ r.start(); return; }catch(e){}
+      }
+      recLabel.textContent = wantVoice ? "Mic stopped \u2014 let go and type instead" : "Hold to talk";
+      if(pending) finish();
+    };
     return r;
   }
 
   function startListening(){
-    heard=""; capTxt.textContent="";
+    heard=""; committed=""; runFinal=""; restarts=0;
+    capTxt.textContent="";
     if(!voiceMode) return;
+    wantVoice=true;
     try{
       if(!rec) rec=buildRec();
-      rec.start(); listening=true;
-      recLabel.textContent="Recording";
+      rec.start();
     }catch(e){ /* already running */ }
   }
+
   function stopListening(){
-    if(voiceMode && listening && rec){ try{ rec.stop(); }catch(e){ listening=false; finish(); } }
-    else finish();
+    wantVoice=false;
+    if(voiceMode && listening && rec){
+      try{ rec.stop(); }
+      catch(e){ listening=false; heard=dedupe((committed+" "+runFinal).trim()); finish(); }
+    } else {
+      heard=dedupe((committed+" "+runFinal).trim());
+      finish();
+    }
   }
 
   /* ---------------- text prep ---------------- */
