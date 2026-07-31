@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Caret — talk in the text</title>
+<title>Meristem — talk in the text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -409,7 +409,7 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <span class="wordmark">Caret</span>
+    <span class="wordmark">Meristem</span>
     <button class="reset" id="up" hidden>&#8592; Back</button>
     <span class="crumb" id="crumb" hidden></span>
     <span class="acts">
@@ -1281,7 +1281,7 @@
   /* ---------------- thread import / export ---------------- */
   function exportTree(){
     return JSON.stringify({
-      caret:1, root:rootId(), cur:curId, seq:seq, nextId:nextId,
+      meristem:1, caret:1, root:rootId(), cur:curId, seq:seq, nextId:nextId,
       nodes:Object.keys(nodes).map(function(id){
         var n=nodes[id];
         return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
