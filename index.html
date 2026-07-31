@@ -1,0 +1,2245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Caret — talk in the text</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E9ECF2;
+    --card:#FFFFFF;
+    --ink:#141B2D;
+    --muted:#6A7593;
+    --rule:#D9DEE8;
+    --mark:#CF2E4B;
+    --hi:#FFE066;
+    --sheet:#0F1524;
+    --r-s:5px;
+    --r-m:9px;
+    --r-l:11px;
+    --pill:7px;
+    --lift:0 10px 30px rgba(20,27,45,.10);
+    --lift-lg:0 18px 46px rgba(20,27,45,.16);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  html,body{height:100%;overflow:hidden}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Newsreader",Georgia,serif;
+    overscroll-behavior:none;
+  }
+  button{font-family:"Newsreader",Georgia,serif;cursor:pointer;border:0;background:none;color:inherit}
+  button:focus-visible{outline:2px solid var(--mark);outline-offset:3px;border-radius:var(--r-s)}
+  textarea:focus,textarea:focus-visible{outline:none}
+  button{transition:background-color .15s,border-color .15s,color .15s,transform .12s}
+  button:active{transform:translateY(1px)}
+
+  /* ---------- shell ---------- */
+  .app{max-width:640px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+  .scroller{
+    flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;
+    --fade:linear-gradient(to bottom,#000 0,#000 calc(100% - 172px),transparent calc(100% - 122px));
+    -webkit-mask-image:var(--fade);mask-image:var(--fade);
+  }
+  .scroller.scrolled{
+    --fade:linear-gradient(to bottom,transparent 0,transparent 22px,#000 70px,#000 calc(100% - 172px),transparent calc(100% - 122px));
+  }
+
+  .topbar{
+    flex:0 0 auto;z-index:30;
+    display:flex;align-items:center;gap:10px;
+    height:58px;padding:0 20px;
+    background:var(--paper);
+  }
+  .wordmark{
+    font-family:"Newsreader",Georgia,serif;font-weight:700;
+    font-size:20px;letter-spacing:.002em;color:var(--ink);
+  }
+  .acts{margin-left:auto;display:flex;align-items:center;gap:12px;flex:0 0 auto;min-height:39px}
+  .tbtn,.btn,.mini,.topbar .reset{
+    font-family:"Newsreader",Georgia,serif;font-size:14px;font-weight:700;letter-spacing:.002em;
+    line-height:1.2;padding:10px 6px;background:none;border:0;border-radius:var(--pill);
+    color:var(--muted);cursor:pointer;
+  }
+  .tbtn,.mini.solid{color:var(--ink)}
+  .tbtn:hover,.btn:hover,.mini:hover,.topbar .reset:hover{color:var(--mark)}
+  .tbtn:disabled{opacity:.3;cursor:default}
+
+  /* ---------- paste screen ---------- */
+  .paste{padding:24px 20px 40px;display:flex;flex-direction:column;gap:16px}
+  .head{flex:0 0 auto;padding:6px 20px 22px;text-align:center;background:var(--paper)}
+  .head h1{
+    margin:0;font-family:"Newsreader",Georgia,serif;font-weight:700;
+    font-size:25px;line-height:1.22;letter-spacing:.002em;color:var(--ink);
+  }
+  .head p{
+    margin:10px auto 0;max-width:44ch;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;line-height:1.6;color:var(--muted);
+  }
+  .hint{font-family:"Newsreader",Georgia,serif;font-size:12px;line-height:1.7;color:var(--muted);margin:0}
+  .reader.editing{user-select:text;-webkit-user-select:text;outline:none;min-height:200px}
+  .reader.editing p{border-left-color:var(--ink)}
+  .reader.editing[data-empty="1"] p:first-child::before{
+    content:attr(data-ph);color:#9AA3B6;pointer-events:none;
+    font:inherit;font-size:inherit;line-height:inherit;letter-spacing:inherit;
+  }
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .btn:disabled{opacity:.35;cursor:default}
+
+  /* ---------- reader ---------- */
+  .reader{
+    font-size:19px;line-height:2.05;letter-spacing:.002em;
+    padding:0 0 200px;
+    user-select:none;-webkit-user-select:none;
+  }
+  #setup{display:flex;flex-direction:column;gap:16px}
+  .reader p{margin:0 0 2.05em;padding-left:16px;border-left:3px solid var(--rule)}
+  .w{border-radius:var(--r-s);padding:1px 0}
+  .w.live{background:var(--hi);box-shadow:0 0 0 3px var(--hi);border-radius:var(--r-s)}
+  .w.annot{
+    text-decoration:underline;
+    text-decoration-color:var(--mark);
+    text-underline-offset:5px;
+    text-decoration-thickness:2px;
+  }
+  sup.mk{
+    font-family:"Newsreader",Georgia,serif;font-size:10px;font-weight:500;
+    color:var(--mark);vertical-align:super;line-height:0;padding-left:2px;
+  }
+  .w.done{
+    text-decoration:underline;
+    text-decoration-color:#9AA6C0;
+    text-decoration-style:dotted;
+    text-underline-offset:5px;
+  }
+  .reply{
+    margin:.6em 0 1.4em;padding:16px 18px;background:var(--card);
+    border-left:3px solid var(--mark);border-radius:var(--r-m);
+    box-shadow:var(--lift);
+    font-family:"Newsreader",Georgia,serif;font-size:13.5px;line-height:1.65;
+  }
+  .reply .said{color:var(--mark);font-size:12px;margin-bottom:8px;display:block}
+  .reply .said b{font-weight:500}
+  .reply .ans{color:var(--ink);white-space:pre-wrap}
+  .reply .openrow{display:flex;align-items:baseline;gap:10px;margin-top:11px}
+  .reply .open{font-weight:700;color:var(--mark);cursor:pointer}
+  .reply .kidcount{color:var(--muted);font-size:12px}
+  .mergehead{
+    font-family:"Newsreader",Georgia,serif;font-size:13px;color:var(--muted);
+    margin:2.6em 0 .3em;padding-top:1.4em;border-top:1px solid var(--rule);
+  }
+  .mk.ans{color:var(--mark);font-weight:700}
+  .rnum{
+    display:inline-block;min-width:15px;color:var(--mark);font-weight:700;
+  }
+  .reply:hover{border-left-color:var(--ink)}
+
+  .pagehead{margin:0 0 1.8em}
+  .ctx{
+    margin-top:12px;padding-left:16px;border-left:3px solid var(--mark);
+  }
+  .ctx .cq{
+    display:block;font-family:"Newsreader",Georgia,serif;font-size:15px;font-style:italic;
+    color:var(--muted);line-height:1.5;margin-bottom:5px;
+  }
+  .ctx .cn{
+    display:block;font-family:"Newsreader",Georgia,serif;font-size:16px;line-height:1.5;color:var(--ink);
+  }
+  .ctx .cs{display:flex;gap:14px;margin-top:9px}
+  .stat{
+    background:none;border:0;padding:0;cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:13px;color:var(--muted);
+  }
+  .stat:hover{color:var(--ink)}
+  .stat.on{color:var(--mark);font-weight:700}
+  .tnode.done{opacity:.45}
+  .tnode .tstat{
+    display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--mark);margin-top:4px;
+  }
+  .backlink{
+    display:block;margin:0;padding:0;background:none;border:0;cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:14px;font-weight:700;color:var(--muted);
+  }
+  .backlink:hover{color:var(--mark)}
+
+  .crumb{cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:13px;color:var(--muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;
+  }
+
+  .treeview{
+    position:fixed;inset:0;z-index:45;background:var(--paper);
+    display:flex;flex-direction:column;
+  }
+  .treehead,.treebar{max-width:900px;width:100%;margin:0 auto}
+  .treeread{max-width:640px;width:100%;margin:0 auto}
+  .treehead{
+    display:flex;align-items:center;gap:16px;
+    padding:16px 20px;font-family:"Newsreader",Georgia,serif;font-size:14px;color:var(--muted);
+  }
+  .tsel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .treebar{
+    display:flex;align-items:center;gap:16px;padding:0 20px 14px;
+    font-family:"Newsreader",Georgia,serif;font-size:14px;color:var(--muted);
+  }
+  .tcount{flex:1;min-width:0;color:var(--muted)}
+  #tselect.armed{color:var(--mark)}
+  .tnode.pick{border-left-color:var(--mark);background:#FFF6DA}
+  .tnode .tnum{
+    position:absolute;top:-9px;right:-9px;min-width:20px;height:20px;line-height:20px;
+    text-align:center;border-radius:50%;background:var(--mark);color:#fff;
+    font-size:11px;font-weight:700;
+  }
+  #treeopen{color:var(--mark)}
+  .treeread{
+    flex:1;overflow-y:auto;padding:2px 20px 130px;
+    font-family:"Newsreader",Georgia,serif;
+  }
+  .rnode{
+    position:relative;border-left:3px solid var(--rule);
+    padding:0 38px 2px 15px;margin:1.5em 0 1.5em;
+  }
+  .rfold{
+    position:absolute;top:-4px;right:0;width:32px;height:32px;
+    background:none;border:0;cursor:pointer;color:var(--muted);
+    font-size:16px;line-height:32px;text-align:center;
+  }
+  .rfold:hover{color:var(--mark)}
+  .reader .rnode{user-select:none}
+  .reader .rtext,.reader .rquote,.reader .rnote{user-select:text}
+  .rnode .rnode{margin:1.1em 0 1.1em}
+  .rnode.cur{border-left-color:var(--ink)}
+  .rnode.resolved{border-left-color:var(--mark)}
+  .rnode.dropped{opacity:.5}
+  .rhead{
+    display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:15px;font-weight:700;color:var(--mark);
+    line-height:1.45;
+  }
+  .rnode.root .rhead{color:var(--ink)}
+  .rhead:hover{text-decoration:underline}
+  .rmeta{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:3px}
+  .rquote{
+    display:block;font-size:13px;font-style:italic;color:var(--muted);
+    margin:7px 0 0;line-height:1.5;
+  }
+  .rtext{
+    font-size:15px;line-height:1.62;color:var(--ink);white-space:pre-wrap;margin:9px 0 0;
+  }
+  .rtext.hid{display:none}
+  .rhead:hover .rmeta{color:var(--muted)}
+  .rnote{
+    display:block;font-size:14px;line-height:1.55;color:var(--ink);
+    margin:8px 0 0;padding-left:13px;border-left:2px solid var(--rule);
+  }
+
+  .treebody{
+    flex:1;overflow:hidden;position:relative;margin-bottom:112px;
+    perspective:2600px;perspective-origin:50% 45%;
+    touch-action:none;cursor:grab;
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0, #000 46px, #000 calc(100% - 46px), transparent 100%),
+      linear-gradient(to bottom, transparent 0, #000 38px, #000 calc(100% - 38px), transparent 100%);
+    -webkit-mask-composite:source-in;
+    mask-image:
+      linear-gradient(to right, transparent 0, #000 46px, #000 calc(100% - 46px), transparent 100%),
+      linear-gradient(to bottom, transparent 0, #000 38px, #000 calc(100% - 38px), transparent 100%);
+    mask-composite:intersect;
+  }
+  .treebody:active{cursor:grabbing}
+  .scene{
+    position:absolute;left:50%;top:45%;width:0;height:0;
+    transform-style:preserve-3d;
+  }
+  .scene.anim{transition:transform .38s cubic-bezier(.3,.85,.35,1)}
+  .tnode{
+    /* origin at 0 0 so the card's own transform carries no rotation residual —
+       its centre then lands exactly on the projected point the wires use */
+    position:absolute;left:0;top:0;transform-origin:0 0;
+    width:186px;margin:0;
+    text-align:left;background:var(--card);border:0;cursor:pointer;
+    border-left:3px solid var(--rule);border-radius:var(--r-s);
+    padding:11px 13px;font-family:"Newsreader",Georgia,serif;
+    box-shadow:var(--lift);transform-style:preserve-3d;
+  }
+  .tnode:hover{border-left-color:var(--ink)}
+  .tnode.cur{border-left-color:var(--ink)}
+  .tnode.sel{border-left-color:var(--mark);box-shadow:var(--lift-lg);outline:2px solid var(--mark);outline-offset:3px}
+  .tnode .tq{display:block;font-size:11px;color:var(--mark);margin-bottom:3px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tnode .tt{display:block;font-size:13px;line-height:1.4;color:var(--ink);
+    max-height:3.9em;overflow:hidden}
+  .tnode.full{padding:13px 15px}
+  .tnode.full .tt{max-height:none;white-space:pre-wrap;font-size:13.5px;line-height:1.6}
+  .tnode.full .tq{white-space:normal;overflow:visible;font-size:12px;line-height:1.45;margin-bottom:6px}
+  .tnode .tanchor{
+    display:block;font-size:11.5px;font-style:italic;color:var(--muted);
+    line-height:1.5;margin:0 0 7px;
+  }
+  .tnode .topen{
+    display:block;font-size:11.5px;color:var(--ink);line-height:1.5;
+    margin:9px 0 0;padding-left:9px;border-left:2px solid var(--rule);
+  }
+  #tfull.armed{color:var(--mark)}
+  .tnode.cur .tt,.tnode.sel .tt{font-weight:700}
+  .tnode .tm{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+  .wires{
+    position:absolute;inset:0;width:100%;height:100%;
+    pointer-events:none;overflow:visible;
+  }
+  .wires line{stroke:#7A879F;stroke-width:2.2;stroke-linecap:round}
+  .wires line.hot{stroke:var(--mark);stroke-width:3.2}
+
+  /* floating live caption */
+  .caption{
+    position:fixed;z-index:60;left:12px;right:12px;
+    max-width:616px;margin:0 auto;
+    background:var(--sheet);color:#fff;border-radius:var(--r-m);
+    padding:14px 16px;font-family:"Newsreader",Georgia,serif;font-size:13px;line-height:1.55;
+    display:none;box-shadow:0 16px 44px rgba(15,21,36,.38);
+  }
+  .caption.on{display:block}
+  .caption .rec{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9AA6C0;margin-bottom:7px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--mark);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .caption .txt{min-height:1.5em;color:#F4F6FB}
+  .caption .txt:empty::after{content:"listening…";color:#59637E}
+
+
+  /* ---------- bottom sheet ---------- */
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:var(--paper);color:var(--ink);
+    max-width:640px;margin:0 auto;
+    transform:translateY(calc(100% - 106px));
+    transition:transform .28s cubic-bezier(.3,.8,.4,1);
+    max-height:78vh;display:flex;flex-direction:column;
+  }
+  .sheet.open{transform:translateY(0)}
+  .sheet.empty{transform:translateY(100%)}
+  .grab{
+    display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:14px 18px 16px;
+    font-family:"Newsreader",Georgia,serif;font-size:12px;letter-spacing:.01em;flex:0 0 auto;
+    cursor:pointer;user-select:none;-webkit-user-select:none;
+  }
+  .grab .count{color:var(--ink);font-weight:500;flex:0 0 auto;min-width:14px;text-align:center}
+  .grab .chev{color:var(--muted);font-size:13px;flex:0 0 auto;padding:0 2px;margin-left:auto}
+  .mini{flex:0 0 auto}
+  .baracts{flex:1 0 100%;display:flex;gap:8px}
+  .sheetbody{overflow:auto;padding:0 20px 22px;-webkit-overflow-scrolling:touch}
+
+  .note{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--rule)}
+  .note .num{font-family:"Newsreader",Georgia,serif;font-size:11px;font-weight:500;color:var(--mark);padding-top:3px;min-width:18px}
+  .note .body{flex:1;min-width:0}
+  .note .quote{font-size:14px;color:var(--muted);font-style:italic;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .note .said{
+    font-family:"Newsreader",Georgia,serif;font-size:13px;line-height:1.6;color:var(--ink);
+    white-space:pre-wrap;word-break:break-word;cursor:text;
+    border-left:3px solid transparent;padding-left:11px;
+  }
+  .note .said:hover{border-left-color:var(--rule)}
+  .note .said.editing{border-left-color:var(--ink);outline:none}
+  .note .kill{font-size:16px;font-weight:700;color:var(--muted);padding:0 4px;align-self:flex-start}
+  .note .kill:hover{color:var(--mark)}
+
+
+  .modemenu{
+    position:fixed;left:12px;right:12px;bottom:74px;z-index:70;
+    max-width:616px;margin:0 auto;
+    background:var(--card);border:1px solid var(--rule);border-radius:var(--r-m);overflow:hidden;
+    box-shadow:var(--lift-lg);
+  }
+  .mitem{display:block;width:100%;text-align:left;padding:15px 17px;font-family:"Newsreader",Georgia,serif;border-bottom:1px solid var(--rule);cursor:pointer;background:var(--card)}
+  .mitem:last-child{border-bottom:0}
+  .mitem .n{font-size:15px;font-weight:700;letter-spacing:.002em;color:var(--ink);display:block;margin-bottom:2px}
+  .mitem .d{font-size:11.5px;line-height:1.5;color:var(--muted);display:block}
+  .mitem:hover{background:#F1F3F7}
+  .mitem.on{background:var(--ink)}
+  .mitem.on .n{color:#fff}
+  .mitem.on .d{color:#A8B2C6}
+
+
+
+  .preview{
+    display:block;width:100%;min-height:150px;resize:none;
+    background:transparent;border:0;padding:16px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;line-height:1.65;color:var(--ink);
+    white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text;
+  }
+  .previewbox{
+    display:none;margin-top:12px;overflow:hidden;
+    background:var(--card);border:1px solid var(--rule);border-radius:var(--r-m);
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .previewbox.on{display:block}
+
+  .toast{
+    position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:80;
+    background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--pill);
+    box-shadow:var(--lift-lg);
+    font-family:"Newsreader",Georgia,serif;font-size:14px;letter-spacing:.002em;
+    opacity:0;transition:opacity .2s;pointer-events:none;
+  }
+  .toast.on{opacity:1}
+
+  .micnote{
+    font-family:"Newsreader",Georgia,serif;font-size:11px;line-height:1.6;color:var(--muted);
+    border-left:2px solid var(--mark);padding:2px 0 2px 10px;margin:0;
+  }
+
+  /* fallback typing card */
+  .typein{position:fixed;inset:0;z-index:70;background:rgba(15,21,36,.55);display:none;align-items:flex-end}
+  .typein.on{display:flex}
+  .typein .card.drop{outline:2px dashed var(--mark);outline-offset:6px}
+  .dropping .reader,.dropping .paste{opacity:.55}
+  .typein .card{background:var(--card);width:100%;max-width:640px;margin:0 auto;padding:22px 20px 20px;border-radius:var(--r-l) var(--r-l) 0 0;box-shadow:var(--lift-lg)}
+  .typein .q{font-size:15px;font-style:italic;color:var(--muted);margin:0 0 10px}
+  .typein textarea{width:100%;min-height:88px;border:1px solid var(--rule);transition:border-color .15s,box-shadow .15s;border-radius:var(--r-s);padding:13px;font-family:"Newsreader",Georgia,serif;font-size:14px;line-height:1.5;resize:none;background:var(--paper);color:var(--ink)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <span class="wordmark">Caret</span>
+    <button class="reset" id="up" hidden>&#8592; Back</button>
+    <span class="crumb" id="crumb" hidden></span>
+    <span class="acts">
+      <button class="reset" id="treebtn" hidden>Tree</button>
+      <button class="reset" id="exportbtn" hidden>Export</button>
+      <button class="reset" id="edit" hidden>Edit text</button>
+      <button class="reset" id="reset" hidden>New text</button>
+      <button class="tbtn" id="go">Annotate</button>
+    </span>
+  </header>
+
+  <div class="head">
+    <h1>Talk in the text</h1>
+    <p>Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.</p>
+  </div>
+
+  <div class="scroller" id="scroller">
+  <section class="paste" id="paste">
+    <div class="reader" id="reader" data-ph="Paste here…"></div>
+    <div id="setup">
+      <div class="row">
+        <button class="btn ghost" id="sample">Use sample text</button>
+        <button class="btn ghost" id="sampletree">Use sample tree</button>
+        <button class="btn ghost" id="importbtn">Paste a thread</button>
+        <button class="btn ghost" id="miccheck">Check mic</button>
+      </div>
+      <p class="micnote" id="micnote" hidden></p>
+    </div>
+  </section>
+  </div>
+</div>
+
+
+<div class="caption" id="caption" role="status" aria-live="polite">
+  <div class="rec"><span class="dot"></span><span id="reclabel">Recording</span></div>
+  <div class="txt" id="captxt"></div>
+</div>
+
+<div class="treeview" id="treeview" hidden>
+  <div class="treehead">
+    <span class="tsel" id="tsel"></span>
+    <button class="reset" id="rootbtn">Root</button>
+    <button class="reset" id="fitbtn">Fit all</button>
+    <button class="reset" id="readbtn">Read all</button>
+    <button class="reset" id="treeopen">Open page</button>
+    <button class="reset" id="treeclose">Close</button>
+  </div>
+  <div class="treebar" id="treebar">
+    <span class="tcount" id="tcount"></span>
+    <button class="reset" id="tselect">Select pages</button>
+    <button class="reset" id="tclear" hidden>Clear</button>
+  </div>
+  <div class="treeread" id="treeread" hidden></div>
+  <div class="treebody" id="treebody">
+    <svg class="wires" id="wires"></svg>
+    <div class="scene" id="scene"></div>
+  </div>
+</div>
+
+<div class="modemenu" id="modemenu" hidden></div>
+
+<!-- SHEET -->
+<div class="sheet empty" id="sheet">
+  <div class="grab" id="grab" role="button" tabindex="0">
+    <span class="count" id="count">0</span>
+    <button class="mini" id="modebtn">Respond &#9662;</button>
+    <span class="chev" id="chev">&#9650;</span>
+    <div class="baracts">
+      <button class="mini" id="ctxbar">Context: path</button>
+      <button class="mini solid" id="copybar">Copy prompt</button>
+      <button class="mini" id="peekbar">Preview</button>
+      <button class="mini" id="replybar">Paste reply</button>
+    </div>
+  </div>
+  <div class="sheetbody" id="sheetbody">
+    <div id="notelist"></div>
+    <div class="previewbox" id="previewbox"><textarea class="preview" id="preview" spellcheck="false"></textarea></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="typein" id="importin">
+  <div class="card">
+    <p class="q" id="importq">Drop a thread file here, or paste it below. This replaces whatever is open.</p>
+    <textarea id="importtxt" placeholder="Paste the thread data here…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="importsave">Load thread</button>
+      <button class="btn ghost" id="importpick">Choose a file</button>
+      <button class="btn ghost" id="importcancel">Cancel</button>
+    </div>
+    <input type="file" id="importfile" accept=".json,application/json,text/plain" hidden>
+  </div>
+</div>
+
+<div class="typein" id="replyin">
+  <div class="card">
+    <p class="q">Paste the whole reply. Only the notes block gets read.</p>
+    <textarea id="replytxt" placeholder="Paste the AI's response here…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="replysave">Attach replies</button>
+      <button class="btn ghost" id="replycancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="typein" id="typein">
+  <div class="card">
+    <p class="q" id="typeq"></p>
+    <textarea id="typetxt" placeholder="Type, or tap the mic key on your keyboard and talk… Enter saves, Shift+Enter for a new line."></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="typesave">Save note</button>
+      <button class="btn ghost" id="typecancel">Discard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SAMPLE = "The bottleneck isn't model quality anymore, it's the interface. Teams that shipped in 2023 assumed the hard part was getting a coherent paragraph out of the thing, so they built around a text box and moved on. That assumption expired about eighteen months ago.\n\nWhat replaced it is less obvious. Most of the time a person spends in a chat product goes to reading, not writing, and yet every affordance in the product is built for the writing half. You get a cursor, a send button, and a scrollback you can do nothing with except scroll.\n\nThe fix most teams reach for is longer memory. That's the wrong lever. Memory helps the model know what you said before; it does nothing for the reader who is halfway down a response and already disagreeing with the second paragraph. That reader has to hold four objections in their head until they reach the bottom, and by then two of them are gone.";
+
+  var $ = function(id){ return document.getElementById(id); };
+  var pasteEl=$("paste"), readerEl=$("reader"), sheetEl=$("sheet"),
+      capEl=$("caption"), capTxt=$("captxt"), recLabel=$("reclabel"),
+      countEl=$("count"), chevEl=$("chev"), listEl=$("notelist"),
+      prevEl=$("preview"), prevBox=$("previewbox"), toastEl=$("toast"),
+      typeEl=$("typein"), typeQ=$("typeq"), typeTxt=$("typetxt"), micNote=$("micnote");
+
+  /* Every page is a node. The root is what you pasted; each answered note
+     becomes a child page you can open and keep working inside. */
+  var nodes={}, curId=null, seq=0;
+  var words=[];      // tokens of the focused page
+  var TOK=[];        // alias kept for the annotation code
+  var notes=[];      // focused page's notes — always nodes[curId].notes
+  var nextId=1;
+
+  function node(){ return nodes[curId]; }
+
+  function makeNode(text,parentIds,meta){
+    var ps=parentIds==null?[]:(Array.isArray(parentIds)?parentIds.slice():[parentIds]);
+    var id="n"+(seq++);
+    nodes[id]={
+      id:id, parents:ps, text:text,
+      notes:[], kids:[],
+      quote:(meta&&meta.quote)||"", note:(meta&&meta.note)||"",
+      s:(meta?meta.s:0), e:(meta?meta.e:0), para:(meta?meta.para:0),
+      merge:ps.length>1, status:"open"
+    };
+    ps.forEach(function(pid){ if(nodes[pid]) nodes[pid].kids.push(id); });
+    return id;
+  }
+  function firstParent(n){ return n&&n.parents.length?n.parents[0]:null; }
+
+  function tokenize(){
+    var n=node();
+    words=[];
+    (n?n.text:"").replace(/\r/g,"").split(/\n\s*\n/).filter(function(t){return t.trim().length;})
+      .forEach(function(para,pi){
+        para.trim().split(/\s+/).forEach(function(w){ words.push({t:w,p:pi,c:"src"}); });
+      });
+    TOK=words.slice();
+    notes=n?n.notes:[];
+  }
+
+  function depth(id,memo){
+    memo=memo||{};
+    if(memo[id]!=null) return memo[id];
+    var n=nodes[id];
+    if(!n||!n.parents.length) return (memo[id]=0);
+    var d=0;
+    n.parents.forEach(function(p){ d=Math.max(d,depth(p,memo)+1); });
+    return (memo[id]=d);
+  }
+
+  function focusNode(id){
+    curId=id;
+    tokenize();
+    readerEl.classList.remove("editing");
+    readerEl.removeAttribute("contenteditable");
+    $("setup").hidden=true;
+    $("reset").hidden=false; $("edit").hidden=false; $("go").hidden=true;
+    $("exportbtn").hidden=false;
+    render(); refresh(); syncNav();
+    $("scroller").scrollTop=0;
+  }
+
+  function syncNav(){
+    var n=node();
+    var up=$("up");
+    up.hidden=!(n&&n.parents.length);
+    $("treebtn").hidden=!(n&&(n.parents.length||n.kids.length));
+    var crumb=$("crumb");
+    if(n&&n.parents.length){
+      crumb.hidden=false;
+      crumb.textContent="\u21B3 "+(n.note?trim(n.note,46):"reply");
+    } else crumb.hidden=true;
+  }
+
+  function trim(t,n){ t=(t||"").replace(/\s+/g," ").trim(); return t.length>n?t.slice(0,n-1)+"\u2026":t; }
+  var voiceMode=true;
+
+  /* ---------------- speech ---------------- */
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec=null, heard="", pending=null, listening=false;
+
+  if(!SR){
+    voiceMode=false;
+    micNote.hidden=false;
+    micNote.textContent="This browser has no speech recognition, so holding a word opens a typing box instead. The gesture is the same.";
+  }
+
+  function say(msg){ micNote.hidden=false; micNote.textContent=msg; }
+
+  function probeMic(){
+    say("Checking…");
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+      voiceMode=false; say("This browser gives the page no microphone access at all. Holding a word will open a typing box instead.");
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      if(SR){ voiceMode=true; say("Mic works. Hold a word and talk."); }
+      else say("Mic works, but this browser has no speech recognition. Chrome or Safari will transcribe; here you'll get a typing box.");
+    }).catch(function(err){
+      voiceMode=false;
+      if(err&&err.name==="NotAllowedError"){
+        say("The mic is blocked here. Usually that's the preview frame, not your phone — save this file and open it in a browser tab and it should work. Until then, holding a word opens a typing box, and your keyboard's mic key still dictates into it.");
+      } else if(err&&err.name==="NotFoundError"){
+        say("No microphone found on this device.");
+      } else {
+        say("Mic unavailable ("+(err&&err.name?err.name:"unknown")+"). Holding a word will open a typing box instead.");
+      }
+    });
+  }
+
+  function buildRec(){
+    var r=new SR();
+    r.continuous=true; r.interimResults=true; r.lang="en-US";
+    r.onresult=function(ev){
+      var fin="", inter="";
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var chunk=ev.results[i][0].transcript;
+        if(ev.results[i].isFinal) fin+=chunk; else inter+=chunk;
+      }
+      if(fin) heard+=fin;
+      capTxt.textContent=(heard+inter).trim();
+    };
+    r.onerror=function(ev){
+      if(ev.error==="not-allowed"||ev.error==="service-not-allowed"){
+        voiceMode=false;
+        recLabel.textContent="Mic unavailable";
+      }
+    };
+    r.onend=function(){ listening=false; if(pending) finish(); };
+    return r;
+  }
+
+  function startListening(){
+    heard=""; capTxt.textContent="";
+    if(!voiceMode) return;
+    try{
+      if(!rec) rec=buildRec();
+      rec.start(); listening=true;
+      recLabel.textContent="Recording";
+    }catch(e){ /* already running */ }
+  }
+  function stopListening(){
+    if(voiceMode && listening && rec){ try{ rec.stop(); }catch(e){ listening=false; finish(); } }
+    else finish();
+  }
+
+  /* ---------------- text prep ---------------- */
+  function load(text){
+    nodes={}; seq=0; nextId=1;
+    focusNode(makeNode(text,null,null));
+  }
+
+  function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function render(){
+    var marksAt={}, annotated={}, done={}, kidsByPara={};
+    notes.forEach(function(n,i){
+      (marksAt[n.e]=marksAt[n.e]||[]).push(i+1);
+      for(var k=n.s;k<=n.e;k++) annotated[k]=true;
+    });
+    var n=node();
+    var answered=(n?n.kids:[]).filter(function(k){ return nodes[k]&&!nodes[k].merge; })
+      .sort(function(a,b){
+        return (nodes[a].para-nodes[b].para) || (nodes[a].s-nodes[b].s);
+      });
+    var replyMark={};
+    answered.forEach(function(kid,i){
+      var k=nodes[kid];
+      for(var j=k.s;j<=k.e;j++) done[j]=true;
+      (replyMark[k.e]=replyMark[k.e]||[]).push(i+1);
+    });
+
+    var seen={};
+
+    /* Everything under this page is shown the way the read-through view shows it:
+       the note as a heading, the reply in full, deeper replies nested inside. */
+    function branch(id,depth,label){
+      if(seen[id]) return "";
+      seen[id]=true;
+      var m=nodes[id];
+      if(!m) return "";
+      var hid=collapsed[id]?" hid":"";
+      var meta=[];
+      if(m.parents.length>1) meta.push("answers a note across "+m.parents.length+" pages");
+      if(m.status!=="open") meta.push(m.status);
+      if(m.notes.length) meta.push(m.notes.length+" note"+(m.notes.length>1?"s":"")+" with no reply yet");
+      if(m.kids.length) meta.push(m.kids.length+" repl"+(m.kids.length>1?"ies":"y"));
+
+      var h='<div class="rnode'+
+            (m.status==="resolved"?" resolved":"")+
+            (m.status==="dropped"?" dropped":"")+'">'+
+            '<button class="rfold" data-fold="'+m.id+'" title="'+
+              (collapsed[id]?"Show":"Hide")+' this reply">'+
+              (collapsed[id]?"\u25B8":"\u25BE")+"</button>"+
+            '<button class="rhead" data-node="'+m.id+'">'+
+              (label?'<span class="rnum">'+label+"</span> ":"")+esc(m.note||"Reply")+
+              (meta.length?'<span class="rmeta">'+esc(meta.join(" \u00B7 "))+"</span>":"")+
+            "</button>";
+      if(m.quote) h+='<span class="rquote">\u201C'+esc(m.quote)+"\u201D</span>";
+      h+='<div class="rtext'+hid+'">'+esc(m.text)+"</div>";
+      m.notes.forEach(function(nt){
+        h+='<span class="rnote'+hid+'">Still open: '+esc(nt.text)+"</span>";
+      });
+
+      if(!collapsed[id]){
+        m.kids.forEach(function(k){
+          if(nodes[k]&&nodes[k].parents.every(function(pp){ return seen[pp]; }))
+            h+=branch(k,depth+1);
+        });
+      }
+      return h+"</div>";
+    }
+
+
+
+    var html="";
+    if(n&&n.parents.length){
+      var up=nodes[firstParent(n)];
+      html+='<div class="pagehead">'+
+              '<div class="ctx">'+
+                (n.quote?'<span class="cq">\u201C'+esc(n.quote)+'\u201D</span>':"")+
+                '<span class="cn">'+esc(n.note)+"</span>"+
+                '<span class="cs">'+
+                  ["open","resolved","dropped"].map(function(k){
+                    return '<button class="stat'+(n.status===k?" on":"")+'" data-status="'+k+'">'+
+                           (k==="open"?"Open":k==="resolved"?"Resolved":"Dropped")+"</button>";
+                  }).join("")+
+                "</span>"+
+              "</div>"+
+            "</div>";
+    }
+    var cp=-1;
+    words.forEach(function(w,i){
+      if(w.p!==cp){
+        if(cp!==-1) html+="</p>";
+        html+="<p>"; cp=w.p;
+      }
+      var cls="w"+(annotated[i]?" annot":"")+(done[i]&&!annotated[i]?" done":"");
+      html+='<span class="'+cls+'" data-i="'+i+'">'+esc(w.t)+"</span>";
+      if(marksAt[i]) html+='<sup class="mk">'+marksAt[i].join(",")+"</sup>";
+      if(replyMark[i]) html+='<sup class="mk ans">'+replyMark[i].join(",")+"</sup>";
+      html+=" ";
+    });
+    if(cp!==-1) html+="</p>";
+
+    if(answered.length){
+      html+='<div class="mergehead">Replies</div>';
+      html+=answered.map(function(k,i){ return branch(k,0,i+1); }).join("");
+    }
+
+    var merged=(n?n.kids:[]).filter(function(k){ return nodes[k]&&nodes[k].merge; });
+    if(merged.length){
+      html+='<div class="mergehead">Replies spanning this page and others</div>';
+      html+=merged.map(function(k){ return branch(k,0); }).join("");
+    }
+    readerEl.innerHTML=html;
+  }
+
+  /* ---------------- hold / tap gesture ---------------- */
+  var overlayAt=0;
+  var promptDirty=false;
+  var CTX=["path","page","all"], ctxMode="path";
+  var timer=null, engaged=false, startPt=null, anchorA=-1, anchorB=-1, tapIdx=-1;
+
+  function wordAt(x,y){
+    var el=document.elementFromPoint(x,y);
+    if(el&&el.classList&&el.classList.contains("w")) return parseInt(el.dataset.i,10);
+    return -1;
+  }
+  function paintRange(a,b){
+    var lo=Math.min(a,b), hi=Math.max(a,b);
+    var all=readerEl.querySelectorAll(".w");
+    for(var i=0;i<all.length;i++){
+      var idx=parseInt(all[i].dataset.i,10);
+      all[i].classList.toggle("live", idx>=lo && idx<=hi);
+    }
+  }
+  function paintLive(){ paintRange(anchorA,anchorB); }
+  function clearLive(){
+    var all=readerEl.querySelectorAll(".w.live");
+    for(var i=0;i<all.length;i++) all[i].classList.remove("live");
+  }
+
+  readerEl.addEventListener("input",function(){
+    if(readerEl.classList.contains("editing"))
+      readerEl.dataset.empty=readSurface().trim()?"0":"1";
+  });
+
+  readerEl.addEventListener("click",function(e){
+    var t=e.target;
+    if(t.classList&&t.classList.contains("stat")){
+      var n2=node();
+      if(n2){ n2.status=t.dataset.status; render(); refresh(); }
+      return;
+    }
+    var fold=t.closest?t.closest(".rfold"):null;
+    if(fold&&fold.dataset.fold){
+      collapsed[fold.dataset.fold]=!collapsed[fold.dataset.fold];
+      render();
+      return;
+    }
+    var head=t.closest?t.closest(".rhead"):null;
+    if(head&&head.dataset.node){
+      focusNode(head.dataset.node);
+      return;
+    }
+  });
+
+  readerEl.addEventListener("pointerdown",function(e){
+    if(readerEl.classList.contains("editing")) return;
+    var t=e.target;
+    if(!t.classList||!t.classList.contains("w")) return;
+    var idx=parseInt(t.dataset.i,10);
+    startPt={x:e.clientX,y:e.clientY};
+    tapIdx=idx;
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      engaged=true; anchorA=anchorB=idx;
+      try{ readerEl.setPointerCapture(e.pointerId); }catch(err){}
+      paintLive();
+      capEl.classList.add("on");
+      positionCaption();
+      if(navigator.vibrate) navigator.vibrate(8);
+      startListening();
+    },140);
+  });
+
+  readerEl.addEventListener("pointermove",function(e){
+    if(!engaged){
+      if(startPt){
+        var d=Math.hypot(e.clientX-startPt.x, e.clientY-startPt.y);
+        if(d>10){ clearTimeout(timer); startPt=null; }
+      }
+      return;
+    }
+    var idx=wordAt(e.clientX,e.clientY);
+    if(idx>=0 && idx!==anchorB){ anchorB=idx; paintLive(); }
+  });
+
+  readerEl.addEventListener("touchmove",function(e){
+    if(engaged) e.preventDefault();
+  },{passive:false});
+
+  function release(){
+    clearTimeout(timer);
+    if(!engaged){
+      if(startPt&&tapIdx>=0){ paintRange(tapIdx,tapIdx); askType({s:tapIdx,e:tapIdx}); }
+      startPt=null; tapIdx=-1;
+      return;
+    }
+    startPt=null; tapIdx=-1;
+    engaged=false;
+    var a=Math.min(anchorA,anchorB), b=Math.max(anchorA,anchorB);
+    pending={s:a,e:b};
+    capEl.classList.remove("on");
+    stopListening();
+  }
+  readerEl.addEventListener("pointerup",release);
+  readerEl.addEventListener("pointercancel",release);
+  window.addEventListener("blur",function(){ if(engaged) release(); });
+
+  function finish(){
+    var p=pending; pending=null;
+    if(!p) return;
+    var said=heard.trim();
+    if(!said){ askType(p); return; }
+    addNote(p.s,p.e,said);
+  }
+
+  function addNote(s,e,text){
+    notes.push({id:nextId++,s:s,e:e,text:text});
+    notes.sort(function(x,y){ return x.s-y.s || x.e-y.e; });
+    node().notes=notes;
+    render(); refresh();
+  }
+
+  function span(a,b){
+    var out=[]; for(var i=a;i<=b;i++) out.push(TOK[i].t);
+    return out.join(" ");
+  }
+  function quoteFor(n){
+    var core=span(n.s,n.e);
+    if(n.e-n.s>=2) return core;
+    var back=n.s;
+    while(back>0 && n.s-back<6) back--;
+    var lead=back<n.s?span(back,n.s-1):"";
+    return (back>0?"\u2026":"")+(lead?lead+" ":"")+core;
+  }
+
+  function sourceText(){
+    var out=[], cur=-1, line=[];
+    words.forEach(function(w){
+      if(w.p!==cur){ if(line.length) out.push(line.join(" ")); line=[]; cur=w.p; }
+      line.push(w.t);
+    });
+    if(line.length) out.push(line.join(" "));
+    return out.join("\n\n");
+  }
+
+  function parseReply(raw){
+    var m=raw.match(/\[\[notes\]\]([\s\S]*?)(?:\[\[\/notes\]\]|$)/i);
+    var body=m?m[1]:raw;
+    var map={}, cur=null;
+    body.split(/\n/).forEach(function(L){
+      var hit=L.match(/^\s*\[?(\d{1,3})\]?\s*(?:\u2192|->|=>|:|\u2014|-)\s*(.+)$/);
+      if(hit){ cur=hit[1]; map[cur]=(map[cur]?map[cur]+"\n":"")+hit[2].trim(); }
+      else if(cur && L.trim()) map[cur]+="\n"+L.trim();
+    });
+    return map;
+  }
+
+  function attachReplies(raw){
+    var map=parseReply(raw);
+    var keep=[], hit=0, first=null;
+    notes.forEach(function(n,i){
+      var ans=map[String(i+1)];
+      if(ans){
+        hit++;
+        var id=makeNode(ans.trim(),curId,{
+          quote:quoteFor(n), note:n.text, s:n.s, e:n.e, para:TOK[n.e].p
+        });
+        if(!first) first=id;
+      } else keep.push(n);
+    });
+    if(!hit){ toast("No numbered answers found"); return; }
+    node().notes=keep; notes=keep;
+    render(); refresh(); syncNav();
+    toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
+  }
+
+  function editNote(n,el){
+    if(el.classList.contains("editing")) return;
+    el.setAttribute("contenteditable","true");
+    el.classList.add("editing");
+    el.focus();
+    var r=document.createRange(); r.selectNodeContents(el); r.collapse(false);
+    var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    var closed=false;
+    function done(){
+      if(closed) return; closed=true;
+      el.removeAttribute("contenteditable"); el.classList.remove("editing");
+      var v=(el.innerText||el.textContent||"").trim();
+      if(v) n.text=v;
+      refresh();
+    }
+    el.addEventListener("blur",done);
+    el.addEventListener("keydown",function(e){
+      if(e.key==="Escape"){ el.textContent=n.text; closed=true; el.removeAttribute("contenteditable"); el.classList.remove("editing"); refresh(); }
+      if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); el.blur(); }
+    });
+  }
+
+  /* ---------------- modes + prompt ---------------- */
+  var MODES=[
+    {k:"rewrite",label:"Rewrite",hint:"Returns the revised text, ready to paste.",
+     head:"Below is a piece of text, then my notes on it. Each note is anchored to the exact words that prompted it.",
+     tail:"Apply my notes and return the full revised text. Return only the text — no preamble, no summary of what you changed, no commentary. If a note is a question rather than an instruction, answer it in a short list underneath the text."},
+    {k:"respond",label:"Respond",hint:"Answers your notes in prose. No rewriting.",
+     head:"Below are my notes on the text, each anchored to the exact words that prompted it, in reading order.",
+     tail:"Respond to each note in order. Some are questions, some are objections, some just mean expand here — infer which from how it's phrased. Don't rewrite the text; just talk to me about the marked parts."},
+    {k:"push",label:"Push back",hint:"Argues where you're wrong instead of agreeing.",
+     head:"Below are my notes on the text, each anchored to the exact words that prompted it.",
+     tail:"Where you think a note of mine is mistaken, say so and make the case. Where I'm right, concede it plainly and briefly. I'd rather be argued with than accommodated, so don't soften a disagreement to keep things pleasant."},
+    {k:"options",label:"Options",hint:"Gives you a few alternatives per note, not one answer.",
+     head:"Below are my notes on the text, each anchored to the exact words that prompted it.",
+     tail:"For each note, give two or three genuinely different alternatives rather than one answer, and say in a few words what each one trades off. Don't pick a favourite unless I asked."},
+    {k:"check",label:"Check",hint:"Verifies the marked claims.",
+     head:"Below are the parts of the text I want checked, each anchored to the exact words in question.",
+     tail:"For each marked passage, tell me whether the claim holds up, how sure you are, and what it rests on. Say plainly when you can't verify something rather than guessing."}
+  ];
+  var mode=MODES[1];
+
+  var BLOCK="\n\nWhen you're done, end your message with a block in exactly this format, so my app can put your answers back beside the notes that prompted them:\n\n[[notes]]\n1 \u2192 your response to note 1\n2 \u2192 your response to note 2\n[[/notes]]\n\nWrite however you like above the block. Use the note numbers exactly as given, keep each answer on one line, and don't repeat my text back inside the block.";
+
+  function pathTo(id){
+    var out=[], x=nodes[id];
+    while(x){ out.unshift(x.id); x=x.parents.length?nodes[x.parents[0]]:null; }
+    return out;
+  }
+
+  function statusLine(n){
+    return n.status==="resolved"?"Resolved" : n.status==="dropped"?"Dropped" : "Open";
+  }
+
+  /* One line per thread in the whole graph — continuity without the bulk. */
+  function ledger(skipId){
+    var lines=[];
+    Object.keys(nodes).forEach(function(id){
+      var x=nodes[id];
+      if(!x.parents.length || id===skipId) return;
+      lines.push(statusLine(x)+": "+trim(x.note,90));
+    });
+    Object.keys(nodes).forEach(function(id){
+      if(id===skipId) return;   // listed in full further down; no need to repeat
+      nodes[id].notes.forEach(function(nt){
+        lines.push("Open (no reply yet): "+trim(nt.text,90));
+      });
+    });
+    return lines;
+  }
+
+  function provenance(n){
+    if(!n||!n.parents.length) return "";
+    var out="This page was written in reply to a note I left"+
+            (n.quote?" on: \u201C"+n.quote+"\u201D":"")+"\n";
+    out+="My note was: "+n.note+"\n\n";
+    return out;
+  }
+
+  function contextBlock(){
+    var n=node();
+    if(!n) return "";
+    var out="";
+
+    if(ctxMode!=="page" && n.parents.length){
+      var path=pathTo(n.id);
+      out+="--- HOW WE GOT HERE ---\n";
+      path.slice(0,-1).forEach(function(id,i){
+        var x=nodes[id];
+        out+="["+(i+1)+"] "+(x.parents.length?"In reply to my note \u201C"+trim(x.note,80)+"\u201D:":"The original text:")+
+             "\n"+x.text+"\n\n";
+      });
+      out+="--- END ---\n\n";
+    }
+
+    if(ctxMode==="all"){
+      var others=Object.keys(nodes).filter(function(id){
+        return pathTo(n.id).indexOf(id)<0;
+      });
+      if(others.length){
+        out+="--- OTHER BRANCHES ---\n";
+        others.forEach(function(id){
+          var x=nodes[id];
+          out+=(x.note?"In reply to \u201C"+trim(x.note,80)+"\u201D:":"")+"\n"+trim(x.text,700)+"\n\n";
+        });
+        out+="--- END ---\n\n";
+      }
+    }
+
+    var led=ledger(n.id);
+    if(led.length){
+      out+="--- THREADS SO FAR ---\n"+led.join("\n")+
+           "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
+    }
+    return out+provenance(n);
+  }
+
+  function buildPrompt(){
+    if(!notes.length) return "";
+    var out=mode.head+"\n\n"+contextBlock();
+    out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
+    notes.forEach(function(n,i){
+      out+="["+(i+1)+"] \u201C"+quoteFor(n)+"\u201D\n    \u2192 "+n.text+"\n\n";
+    });
+    out+="--- END NOTES ---\n\n";
+    out+=mode.tail+BLOCK;
+    return out;
+  }
+
+  function setMode(m){
+    mode=m; syncMode(); prevEl.value=buildPrompt(); promptDirty=false;
+    $("modemenu").hidden=true;
+  }
+  function drawMenu(){
+    var box=$("modemenu"); box.innerHTML="";
+    MODES.forEach(function(m){
+      var b=document.createElement("button");
+      b.className="mitem"+(m.k===mode.k?" on":"");
+      b.innerHTML='<span class="n">'+m.label+'</span><span class="d">'+m.hint+"</span>";
+      b.addEventListener("click",function(e){ e.stopPropagation(); setMode(m); });
+      box.appendChild(b);
+    });
+  }
+  function syncMode(){
+    $("modebtn").innerHTML=mode.label+" \u25BE";
+    drawMenu(); refreshCount();
+  }
+  function refreshCount(){ countEl.textContent=activeNotes().length; }
+
+  /* ---------------- typing a note ---------------- */
+  var typeTarget=null;
+  function askType(p){
+    typeTarget=p;
+    typeQ.textContent="\u201C"+span(p.s,p.e)+"\u201D";
+    typeTxt.value="";
+    typeEl.classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ typeTxt.focus(); },30);
+  }
+  $("typesave").addEventListener("click",function(){
+    var v=typeTxt.value.trim();
+    typeEl.classList.remove("on");
+    if(v&&treeTarget){ addTreeNote(v); }
+    else if(v&&typeTarget){ addNote(typeTarget.s,typeTarget.e,v); }
+    else { clearLive(); treeTarget=null; }
+    typeTarget=null;
+  });
+  typeTxt.addEventListener("keydown",function(e){
+    if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("typesave").click(); }
+    if(e.key==="Escape"){ typeEl.classList.remove("on"); typeTarget=null; clearLive(); }
+  });
+  typeEl.addEventListener("click",function(e){
+    if(Date.now()-overlayAt<450) return;
+    if(e.target===typeEl) $("typesave").click();
+  });
+  $("typecancel").addEventListener("click",function(){
+    typeEl.classList.remove("on"); typeTarget=null; clearLive();
+  });
+
+  function refresh(){
+    refreshCount();
+    var list=activeNotes(), tree=inTree();
+    sheetEl.classList.toggle("empty",list.length===0);
+    listEl.innerHTML="";
+    list.forEach(function(n,i){
+      var d=document.createElement("div"); d.className="note";
+      var num=document.createElement("div"); num.className="num"; num.textContent="["+(i+1)+"]";
+      var body=document.createElement("div"); body.className="body";
+      var q=document.createElement("div"); q.className="quote";
+      q.textContent=tree
+        ? n.ids.length+" page"+(n.ids.length>1?"s":"")+": "+n.ids.map(function(id){
+            var x=nodes[id]; return x&&x.note?trim(x.note,26):"the original";
+          }).join(" + ")
+        : "\u201C"+quoteFor(n)+"\u201D";
+      var s=document.createElement("div"); s.className="said"; s.textContent=n.text;
+      s.title="Tap to edit";
+      s.addEventListener("click",function(){ editNote(n,s); });
+      body.appendChild(q); body.appendChild(s);
+      var kill=document.createElement("button"); kill.className="kill"; kill.textContent="\u00D7";
+      kill.setAttribute("aria-label","Delete note "+(i+1));
+      kill.addEventListener("click",function(){
+        if(tree){ treeNotes=treeNotes.filter(function(x){ return x.id!==n.id; }); drawTree(); return; }
+        notes=notes.filter(function(x){ return x.id!==n.id; });
+        render(); refresh();
+      });
+      d.appendChild(num); d.appendChild(body); d.appendChild(kill);
+      listEl.appendChild(d);
+    });
+    prevEl.value=inTree()?treePrompt():buildPrompt(); promptDirty=false;
+    syncCtx();
+  }
+
+  function positionCaption(){
+    var r=readerEl.getBoundingClientRect();
+    capEl.style.bottom=(notes.length?"110px":"40px");
+  }
+
+  /* ---------------- sheet ---------------- */
+  function toggleSheet(){
+    var open=sheetEl.classList.toggle("open");
+    chevEl.innerHTML=open?"\u25BC":"\u25B2";
+  }
+  $("grab").addEventListener("click",toggleSheet);
+  $("grab").addEventListener("keydown",function(e){
+    if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggleSheet(); }
+  });
+
+  prevEl.addEventListener("input",function(){ promptDirty=true; });
+
+
+  function toast(msg){
+    toastEl.textContent=msg; toastEl.classList.add("on");
+    setTimeout(function(){ toastEl.classList.remove("on"); },1600);
+  }
+
+  function legacyCopy(txt){
+    var ta=document.createElement("textarea");
+    ta.value=txt;
+    ta.setAttribute("readonly","");
+    ta.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;padding:0;border:0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try{ ta.setSelectionRange(0,txt.length); }catch(e){}
+    var ok=false;
+    try{ ok=document.execCommand("copy"); }catch(e){ ok=false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function doCopy(){
+    var txt=promptDirty?prevEl.value:(inTree()?treePrompt():buildPrompt());
+    if(!txt){ toast("No notes yet"); return; }
+    if(legacyCopy(txt)){ toast("Copied"); return; }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ toast("Copied"); },manual);
+    } else manual();
+    function manual(){
+      sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
+      prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
+      toast("Select all and copy");
+    }
+  }
+
+  function openReply(){
+    treeReplyMode=inTree();
+    $("replytxt").value=""; $("replyin").classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ $("replytxt").focus(); },30);
+  }
+
+  $("modebtn").addEventListener("click",function(e){
+    e.stopPropagation();
+    var mm=$("modemenu");
+    mm.hidden=!mm.hidden;
+  });
+  document.addEventListener("click",function(){ $("modemenu").hidden=true; });
+
+  function syncCtx(){
+    var n=node(), deep=n&&n.parents.length;
+    $("ctxbar").hidden=inTree()||!deep;
+    $("ctxbar").textContent="Context: "+ctxMode;
+    $("ctxbar").title=
+      ctxMode==="path"?"Sends the chain from the original down to this page":
+      ctxMode==="page"?"Sends this page only":
+                       "Sends every page in the thread";
+  }
+  $("ctxbar").addEventListener("click",function(e){
+    e.stopPropagation();
+    ctxMode=CTX[(CTX.indexOf(ctxMode)+1)%CTX.length];
+    syncCtx(); refresh();
+  });
+  $("copybar").addEventListener("click",function(e){ e.stopPropagation(); doCopy(); });
+  $("replybar").addEventListener("click",function(e){ e.stopPropagation(); openReply(); });
+  $("peekbar").addEventListener("click",function(e){
+    e.stopPropagation();
+    sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
+    prevBox.classList.toggle("on");
+    if(prevBox.classList.contains("on")) prevEl.scrollIntoView({block:"nearest"});
+  });
+
+  /* ---------------- wiring ---------------- */
+  $("go").addEventListener("click",function(){
+    var v=readSurface().trim();
+    if(!v){ readerEl.focus({preventScroll:true}); return; }
+    var n=node();
+    if(n){ n.text=v; focusNode(n.id); }
+    else load(v);
+  });
+  $("sample").addEventListener("click",function(){ load(SAMPLE); });
+
+  /* ---------------- sample tree, for testing navigation ---------------- */
+  /* ---------------- thread import / export ---------------- */
+  function exportTree(){
+    return JSON.stringify({
+      caret:1, root:rootId(), cur:curId, seq:seq, nextId:nextId,
+      nodes:Object.keys(nodes).map(function(id){
+        var n=nodes[id];
+        return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
+                quote:n.quote,note:n.note,s:n.s,e:n.e,para:n.para,
+                merge:!!n.merge,status:n.status||"open"};
+      })
+    },null,1);
+  }
+
+  function importTree(raw){
+    var data;
+    try{ data=JSON.parse(raw); }
+    catch(e){ toast("That isn't valid thread data"); return false; }
+    if(!data||!Array.isArray(data.nodes)||!data.nodes.length){ toast("No pages in that data"); return false; }
+
+    var fresh={};
+    data.nodes.forEach(function(n){
+      if(!n||!n.id||typeof n.text!=="string") return;
+      fresh[n.id]={
+        id:n.id, parents:Array.isArray(n.parents)?n.parents:[], text:n.text,
+        notes:Array.isArray(n.notes)?n.notes:[], kids:[],
+        quote:n.quote||"", note:n.note||"", s:n.s|0, e:n.e|0, para:n.para|0,
+        merge:!!n.merge, status:n.status||"open"
+      };
+    });
+    var ids=Object.keys(fresh);
+    if(!ids.length){ toast("No usable pages in that data"); return false; }
+
+    /* rebuild kid links from parents so the two can't disagree */
+    ids.forEach(function(id){
+      fresh[id].parents=fresh[id].parents.filter(function(pid){ return fresh[pid]; });
+      fresh[id].parents.forEach(function(pid){ fresh[pid].kids.push(id); });
+      fresh[id].merge=fresh[id].parents.length>1;
+    });
+
+    var roots=ids.filter(function(id){ return !fresh[id].parents.length; });
+    if(!roots.length){ toast("That thread has no starting page"); return false; }
+
+    nodes=fresh;
+    seq=Math.max(data.seq|0, ids.length);
+    nextId=Math.max(data.nextId|0, 1);
+    ids.forEach(function(id){
+      fresh[id].notes.forEach(function(nt){ nextId=Math.max(nextId,(nt.id|0)+1); });
+    });
+    focusNode(fresh[data.cur]?data.cur:roots[0]);
+    toast(ids.length+" page"+(ids.length>1?"s":"")+" loaded");
+    return true;
+  }
+
+  $("importbtn").addEventListener("click",function(){
+    $("importtxt").value="";
+    $("importin").classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ $("importtxt").focus(); },30);
+  });
+  $("importsave").addEventListener("click",function(){
+    var v=$("importtxt").value.trim();
+    if(!v) return;
+    if(importTree(v)) $("importin").classList.remove("on");
+  });
+  $("importcancel").addEventListener("click",function(){ $("importin").classList.remove("on"); });
+
+  /* ---- drag and drop a thread file ---- */
+  function readThreadFile(f){
+    if(!f) return;
+    if(f.size>8*1024*1024){ toast("That file is too big"); return; }
+    var r=new FileReader();
+    r.onload=function(){
+      if(importTree(String(r.result))) $("importin").classList.remove("on");
+    };
+    r.onerror=function(){ toast("Couldn't read that file"); };
+    r.readAsText(f);
+  }
+
+  $("importpick").addEventListener("click",function(){ $("importfile").click(); });
+  $("importfile").addEventListener("change",function(e){
+    var f=e.target.files&&e.target.files[0];
+    readThreadFile(f);
+    e.target.value="";
+  });
+
+  var dragDepth=0;
+  function isFileDrag(e){
+    var dt=e.dataTransfer;
+    if(!dt) return false;
+    if(dt.types){ for(var i=0;i<dt.types.length;i++) if(dt.types[i]==="Files") return true; }
+    return false;
+  }
+  document.addEventListener("dragenter",function(e){
+    if(!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    document.body.classList.add("dropping");
+    var card=$("importin").querySelector(".card");
+    if(card) card.classList.add("drop");
+  });
+  document.addEventListener("dragover",function(e){
+    if(!isFileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect="copy";
+  });
+  document.addEventListener("dragleave",function(e){
+    if(!isFileDrag(e)) return;
+    dragDepth=Math.max(0,dragDepth-1);
+    if(!dragDepth) clearDrag();
+  });
+  function clearDrag(){
+    dragDepth=0;
+    document.body.classList.remove("dropping");
+    var card=$("importin").querySelector(".card");
+    if(card) card.classList.remove("drop");
+  }
+  document.addEventListener("drop",function(e){
+    if(!isFileDrag(e)) return;
+    e.preventDefault();          // otherwise the browser just opens the file
+    clearDrag();
+    readThreadFile(e.dataTransfer.files&&e.dataTransfer.files[0]);
+  });
+  $("importin").addEventListener("click",function(e){
+    if(Date.now()-overlayAt<450) return;
+    if(e.target===$("importin")) $("importin").classList.remove("on");
+  });
+
+  $("exportbtn").addEventListener("click",function(){
+    var txt=exportTree();
+    if(legacyCopy(txt)) toast("Thread copied");
+    else if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast("Thread copied"); });
+    else toast("Couldn't copy");
+  });
+
+  function tokensOf(text){
+    var out=[];
+    text.replace(/\r/g,"").split(/\n\s*\n/).filter(function(t){return t.trim().length;})
+      .forEach(function(para,pi){
+        para.trim().split(/\s+/).forEach(function(w){ out.push({t:w,p:pi}); });
+      });
+    return out;
+  }
+  function anchorIn(text,hint){
+    var toks=tokensOf(text), h=hint.toLowerCase();
+    for(var i=0;i<toks.length;i++){
+      if(toks[i].t.toLowerCase().replace(/[^a-z0-9]/g,"").indexOf(h)===0){
+        var e=Math.min(i+2,toks.length-1);
+        return {s:i,e:e,para:toks[i].p,
+                quote:toks.slice(i,e+1).map(function(t){return t.t;}).join(" ")};
+      }
+    }
+    return {s:0,e:0,para:0,quote:toks.length?toks[0].t:""};
+  }
+  function kidOf(parentId,hint,note,text){
+    var a=anchorIn(nodes[parentId].text,hint);
+    return makeNode(text,parentId,{quote:a.quote,note:note,s:a.s,e:a.e,para:a.para});
+  }
+
+  $("sampletree").addEventListener("click",function(){
+    nodes={}; seq=0; nextId=1;
+    var root=makeNode(SAMPLE,null,null);
+
+    var a=kidOf(root,"interface","Is this actually true though, or just a nice line?",
+      "It's closer to true than it sounds, but the phrasing overstates it. Model quality still gates plenty of tasks. What changed is that for reading-heavy work the interface is now the binding constraint, which is a narrower claim than the sentence makes.\n\nThe honest version: for a large class of everyday use, you would notice a better interface more than a better model.");
+    var b=kidOf(root,"memory","Why is longer memory the wrong lever exactly?",
+      "Memory solves recall across turns. The problem described here is within a single response — you are reading one long answer and accumulating objections as you go. No amount of memory helps, because nothing has been forgotten yet.\n\nThey are orthogonal fixes to different failures, and memory is the one that demos well.");
+    var c=kidOf(root,"reading","Say more about the asymmetry between reading and writing.",
+      "Every control in a chat product acts on the message you are composing. Nothing acts on the message you are reading. You can scroll it, and select it, and that is the whole vocabulary.\n\nCompare a code review tool, where the read surface is where all the interaction lives.");
+
+    kidOf(a,"overstates","Which tasks are still gated by model quality?",
+      "Long-horizon agentic work, hard reasoning under ambiguity, and anything needing reliable tool use over many steps. Those fail on capability, not on interface.");
+    kidOf(a,"noticed","Is that testable?",
+      "Somewhat. Give people the same model behind two interfaces and measure task completion. The confound is that better interfaces change what people attempt, so completion rates move for reasons other than quality.");
+    kidOf(b,"orthogonal","Are they ever the same problem?",
+      "In long sessions, yes — an objection you never raised in turn three is functionally the same as one the model forgot by turn nine. The mechanisms differ but the felt experience converges.");
+
+    nodes[root].notes=[{id:nextId++,s:anchorIn(SAMPLE,"assumption").s,e:anchorIn(SAMPLE,"assumption").e,
+      text:"An unanswered note, left on the root to check that notes stay put per page."}];
+
+    focusNode(root);
+    toast("Sample tree loaded");
+  });
+  $("replysave").addEventListener("click",function(){
+    var v=$("replytxt").value;
+    $("replyin").classList.remove("on");
+    if(!v.trim()){ treeReplyMode=false; return; }
+    if(treeReplyMode){ treeReplyMode=false; attachTreeReplies(v); }
+    else attachReplies(v);
+  });
+  $("replycancel").addEventListener("click",function(){ $("replyin").classList.remove("on"); });
+  $("replyin").addEventListener("click",function(e){
+    if(Date.now()-overlayAt<450) return;
+    if(e.target===$("replyin")) $("replyin").classList.remove("on");
+  });
+
+  function readSurface(){
+    var out=[];
+    Array.prototype.forEach.call(readerEl.children,function(el){
+      var t=(el.innerText||el.textContent||"").replace(/\u00a0/g," ").trim();
+      if(t) out.push(t);
+    });
+    return out.join("\n\n");
+  }
+
+  function toEditor(){
+    var keep=$("scroller").scrollTop;
+    // Do NOT rebuild the DOM. render() has already drawn the paragraphs;
+    // editing just makes those same nodes writable, so nothing can shift.
+    if(!words.length){
+      readerEl.innerHTML='<p data-ph="'+readerEl.dataset.ph+'"><br></p>';
+      readerEl.dataset.empty="1";
+    }
+    readerEl.setAttribute("contenteditable","true");
+    readerEl.classList.add("editing");
+    readerEl.dataset.empty=readSurface().trim()?"0":"1";
+    $("setup").hidden=false;
+    $("edit").hidden=true; $("reset").hidden=true; $("go").hidden=false;
+    sheetEl.classList.remove("open"); chevEl.innerHTML="\u25B2";
+    prevBox.classList.remove("on");
+    readerEl.focus({preventScroll:true});
+    $("scroller").scrollTop=keep;
+  }
+
+  $("edit").addEventListener("click",function(){
+    var n=node();
+    if(n&&(n.notes.length||n.kids.length)) toast("Editing clears this page's notes and replies");
+    if(n){
+      n.kids.forEach(function(k){
+        if(nodes[k]){
+          nodes[k].parents=nodes[k].parents.filter(function(x){ return x!==n.id; });
+          if(!nodes[k].parents.length) delete nodes[k];
+        }
+      });
+      n.kids=[]; n.notes=[];
+    }
+    notes=n?n.notes:[];
+    render(); refresh(); syncNav();
+    toEditor();
+  });
+
+  /* ---------------- 3D thread map ---------------- */
+  var view={yaw:0,pitch:0,zoom:1,panX:0,panY:0};
+  var selId=null, centre={x:0,y:0,z:0}, lastPos={};
+  var readMode=false, collapsed={};
+  var picked=[], treeNotes=[], treeTarget=null, treeReplyMode=false, selectMode=false;
+  function inTree(){ return !$("treeview").hidden; }
+  function activeNotes(){ return inTree()?treeNotes:notes; }
+  function inTree(){ return !$("treeview").hidden; }
+  function activeNotes(){ return inTree()?treeNotes:notes; }
+  var LAYER=300, SPREAD=230;
+  var expanded={};   // pages the reader has opened out in place
+  /* full-text cards are far bigger, so the whole scene has to open up */
+  /* Full text only makes a page taller — width, spacing and depth stay put, so
+     switching it on never shifts the map sideways or changes the camera. */
+  function layerZ(){ return LAYER; }
+  function spreadX(){ return SPREAD; }
+  function liftY(){ return 185; }
+
+  function liftOf(id,memo){
+    memo=memo||{};
+    if(memo[id]!=null) return memo[id];
+    var n=nodes[id];
+    if(!n) return 0;
+    var base=0;
+    n.parents.forEach(function(p){ base=Math.max(base,liftOf(p,memo)); });
+    return (memo[id]=base+(n.merge?1:0));
+  }
+
+  function layout(){
+    /* Layered layout: depth is the longest path from the root, so a reply that
+       joins several pages sits below all of them. Within a layer, nodes are
+       ordered by where their parents sit, then spaced out and centred. */
+    var memo={}, liftMemo={}, byDepth={}, ids=Object.keys(nodes);
+    ids.forEach(function(id){
+      var d=depth(id,memo);
+      (byDepth[d]=byDepth[d]||[]).push(id);
+    });
+
+    var pos={};
+    var levels=Object.keys(byDepth).map(Number).sort(function(a,b){return a-b;});
+    levels.forEach(function(d){
+      var row=byDepth[d];
+      row.sort(function(a,b){
+        var pa=meanParentX(a), pb=meanParentX(b);
+        if(pa!==pb) return pa-pb;
+        return a.localeCompare(b, undefined, {numeric:true});
+      });
+      var width=(row.length-1)*spreadX();
+      row.forEach(function(id,i){
+        pos[id]={x:i*spreadX()-width/2, y:-liftOf(id,liftMemo)*liftY(), z:-d*layerZ()};
+      });
+    });
+
+    function meanParentX(id){
+      var ps=nodes[id].parents.filter(function(p){ return pos[p]; });
+      if(!ps.length) return 0;
+      return ps.reduce(function(a,p){ return a+pos[p].x; },0)/ps.length;
+    }
+
+    /* one relaxation pass so parents drift over the middle of their children */
+    for(var pass=0;pass<3;pass++){
+      levels.slice().reverse().forEach(function(d){
+        byDepth[d].forEach(function(id){
+          var ks=nodes[id].kids.filter(function(k){ return pos[k]; });
+          if(!ks.length) return;
+          var mid=ks.reduce(function(a,k){ return a+pos[k].x; },0)/ks.length;
+          pos[id].x=(pos[id].x+mid)/2;
+        });
+        spread(byDepth[d]);
+      });
+    }
+    function spread(row){
+      var sorted=row.slice().sort(function(a,b){ return pos[a].x-pos[b].x; });
+      for(var i=1;i<sorted.length;i++){
+        var gap=pos[sorted[i]].x-pos[sorted[i-1]].x;
+        if(gap<spreadX()) pos[sorted[i]].x=pos[sorted[i-1]].x+spreadX();
+      }
+    }
+
+    return pos;
+  }
+
+  function applyView(animate){
+    var sc=$("scene");
+    sc.classList.toggle("anim",!!animate);
+    /* Translating the world so the selection sits at the origin BEFORE rotating
+       means every turn pivots around it — it stays pinned dead centre. */
+    sc.style.transform=
+      "translate("+view.panX+"px,"+view.panY+"px)"+
+      " scale("+view.zoom+") rotateX("+view.pitch+"deg) rotateY("+view.yaw+"deg)"+
+      " translate3d("+(-centre.x)+"px,"+(-centre.y)+"px,"+(-centre.z)+"px)";
+    var cards=sc.querySelectorAll(".tnode");
+    for(var i=0;i<cards.length;i++){
+      cards[i].style.transform=cards[i].dataset.pos+
+        " rotateY("+(-view.yaw)+"deg) rotateX("+(-view.pitch)+"deg)"+
+        " translate(-50%,-50%)";
+    }
+    if(animate) trackWires(460); else drawWires();
+  }
+
+  var wires=[], wireRAF=null;
+
+  /* Cards counter-rotate to face the camera, so each one projects to an
+     axis-aligned rectangle — which means the browser's own rect gives its exact
+     centre. Reading that beats predicting it: no assumption about perspective,
+     origins or transform order can drift out of sync with what is on screen. */
+  function drawWires(){
+    var svg=$("wires"), body=$("treebody"), sc=$("scene");
+    if(!svg||!body||!sc) return;
+    var base=body.getBoundingClientRect();
+    var cards=sc.querySelectorAll(".tnode"), at={};
+    for(var i=0;i<cards.length;i++){
+      var r=cards[i].getBoundingClientRect();
+      if(!r.width&&!r.height) continue;
+      at[cards[i].dataset.id]={
+        x:r.left-base.left+r.width/2,
+        y:r.top-base.top+r.height/2
+      };
+    }
+    var out="";
+    wires.forEach(function(w){
+      var a=at[w.a], b=at[w.b];
+      if(!a||!b) return;
+      out+='<line class="'+(w.hot?"hot":"")+'" x1="'+a.x.toFixed(1)+'" y1="'+a.y.toFixed(1)+
+           '" x2="'+b.x.toFixed(1)+'" y2="'+b.y.toFixed(1)+'"/>';
+    });
+    svg.innerHTML=out;
+  }
+
+  /* the scene eases between camera positions, so follow it frame by frame
+     rather than snapping the wires straight to the destination */
+  function trackWires(ms){
+    if(typeof requestAnimationFrame!=="function"){ drawWires(); return; }
+    if(wireRAF) cancelAnimationFrame(wireRAF);
+    var until=Date.now()+ms;
+    (function step(){
+      drawWires();
+      if(Date.now()<until) wireRAF=requestAnimationFrame(step);
+      else wireRAF=null;
+    })();
+  }
+
+  /* Moving the camera changes no layout, so don't rebuild the cards for it —
+     just repoint the pivot and let the existing scene ease across. */
+  function recentre(id){
+    if(!lastPos[id]) { drawTree(false); return; }
+    selId=id;
+    view.panX=0; view.panY=0;
+    centre=lastPos[id];
+
+    var onPath={}, x=nodes[selId];
+    while(x){ onPath[x.id]=true; x=firstParent(x)?nodes[firstParent(x)]:null; }
+    wires.forEach(function(w){ w.hot=onPath[w.a]&&onPath[w.b]; });
+
+    var cards=$("scene").querySelectorAll(".tnode");
+    for(var i=0;i<cards.length;i++){
+      cards[i].classList.toggle("sel", !selectMode && cards[i].dataset.id===selId);
+    }
+
+    syncSel();
+    syncTreeBar();
+    applyView(true);
+  }
+
+  /* return the camera to the default readable angle */
+  function squareUp(){ view.yaw=-26; view.pitch=8; view.panX=0; view.panY=0; }
+
+  var PERSP=2600;
+
+  function projectAt(p,yaw,pitch,zoom){
+    var vx=p.x-centre.x, vy=p.y-centre.y, vz=p.z-centre.z;
+    var ry=yaw*Math.PI/180, rx=pitch*Math.PI/180;
+    var x1= vx*Math.cos(ry)+vz*Math.sin(ry);
+    var z1=-vx*Math.sin(ry)+vz*Math.cos(ry);
+    var y2= vy*Math.cos(rx)-z1*Math.sin(rx);
+    var z2= vy*Math.sin(rx)+z1*Math.cos(rx);
+    var Z=z2*zoom, d=PERSP-Z;
+    if(d<120) d=120;
+    var k=PERSP/d;
+    return {x:x1*zoom*k, y:y2*zoom*k, k:k*zoom};
+  }
+
+  function cardSizes(){
+    var out={}, cards=$("scene").querySelectorAll(".tnode");
+    for(var i=0;i<cards.length;i++){
+      out[cards[i].dataset.id]={
+        w:cards[i].offsetWidth||186,
+        h:cards[i].offsetHeight||110
+      };
+    }
+    return out;
+  }
+
+  /* Try a spread of angles and keep the one that shows every page without cards
+     covering each other or sitting on a connector — then zoom in as far as that
+     angle allows rather than settling for the whole thing being tiny. */
+  function bestView(){
+    var ids=Object.keys(lastPos);
+    if(!ids.length) return null;
+    var size=cardSizes();
+    var body=$("treebody");
+    var vw=(body.clientWidth||960)-56, vh=(body.clientHeight||620)-56;
+
+    var yaws=[0,-10,10,-20,20,-32,32,-45,45,-58,58,-72,72];
+    var pitches=[0,6,-6,13,-13,21,28];
+    var best=null;
+
+    yaws.forEach(function(yaw){
+      pitches.forEach(function(pitch){
+        var at={}, minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+        ids.forEach(function(id){
+          var q=projectAt(lastPos[id],yaw,pitch,1);
+          at[id]=q;
+          var sw=(size[id]?size[id].w:186)*q.k/2, sh=(size[id]?size[id].h:110)*q.k/2;
+          if(q.x-sw<minX) minX=q.x-sw;
+          if(q.x+sw>maxX) maxX=q.x+sw;
+          if(q.y-sh<minY) minY=q.y-sh;
+          if(q.y+sh>maxY) maxY=q.y+sh;
+        });
+        var spanW=Math.max(1,maxX-minX), spanH=Math.max(1,maxY-minY);
+        var zoom=Math.max(.12, Math.min(1.6, Math.min(vw/spanW, vh/spanH)));
+
+        /* re-project at the chosen zoom, since perspective changes with it */
+        var box={};
+        ids.forEach(function(id){
+          var q=projectAt(lastPos[id],yaw,pitch,zoom);
+          var sw=(size[id]?size[id].w:186)*q.k/2, sh=(size[id]?size[id].h:110)*q.k/2;
+          box[id]={x:q.x,y:q.y,w:sw,h:sh};
+        });
+
+        var overlaps=0;
+        for(var i=0;i<ids.length;i++){
+          for(var j=i+1;j<ids.length;j++){
+            var A=box[ids[i]], B=box[ids[j]];
+            if(Math.abs(A.x-B.x) < (A.w+B.w-6) && Math.abs(A.y-B.y) < (A.h+B.h-6)) overlaps++;
+          }
+        }
+
+        var crossings=0;
+        wires.forEach(function(w){
+          var A=box[w.a], B=box[w.b];
+          if(!A||!B) return;
+          for(var t=0.25;t<=0.75;t+=0.25){
+            var px=A.x+(B.x-A.x)*t, py=A.y+(B.y-A.y)*t;
+            for(var m=0;m<ids.length;m++){
+              var id=ids[m];
+              if(id===w.a||id===w.b) continue;
+              var C=box[id];
+              if(Math.abs(px-C.x)<C.w && Math.abs(py-C.y)<C.h){ crossings++; break; }
+            }
+          }
+        });
+
+        var score=overlaps*120 + crossings*8 - zoom*14;
+        if(!best || score<best.score) best={yaw:yaw,pitch:pitch,zoom:zoom,score:score,overlaps:overlaps,crossings:crossings};
+      });
+    });
+    return best;
+  }
+
+  function fitAll(){
+    var b=bestView();
+    if(!b) return;
+    view.yaw=b.yaw; view.pitch=b.pitch; view.zoom=b.zoom;
+    view.panX=0; view.panY=0;
+  }
+
+  function cardHTML(id){
+    var n=nodes[id], full=!!expanded[id];
+    var bits="";
+    if(n.note) bits+='<span class="tq">\u21B3 '+esc(full?n.note:trim(n.note,44))+"</span>";
+    if(full&&n.quote) bits+='<span class="tanchor">\u201C'+esc(n.quote)+"\u201D</span>";
+    bits+='<span class="tt">'+esc(full?n.text:trim(n.text,150))+"</span>";
+    if(full) n.notes.forEach(function(nt){
+      bits+='<span class="topen">Still open: '+esc(nt.text)+"</span>";
+    });
+    var meta=[];
+    if(n.notes.length&&!full) meta.push(n.notes.length+" note"+(n.notes.length>1?"s":""));
+    if(n.kids.length) meta.push(n.kids.length+" repl"+(n.kids.length>1?"ies":"y"));
+    if(meta.length) bits+='<span class="tm">'+meta.join(" \u00B7 ")+"</span>";
+    if(n.status&&n.status!=="open")
+      bits+='<span class="tstat">'+(n.status==="resolved"?"resolved":"dropped")+"</span>";
+    var at=picked.indexOf(id);
+    if(at>=0) bits+='<span class="tnum">'+(at+1)+"</span>";
+    return bits;
+  }
+
+  /* Measure whatever is on screen and stack each generation clear of the one
+     above it — called after a rebuild and after any page opens or closes. */
+  function restack(){
+    var sc=$("scene"), cards=sc.querySelectorAll(".tnode"), tall={};
+    for(var i=0;i<cards.length;i++){
+      var id=cards[i].dataset.id;
+      if(!lastPos[id]) continue;
+      var d=Math.round(-lastPos[id].z/layerZ());
+      tall[d]=Math.max(tall[d]||0, cards[i].offsetHeight||110);
+    }
+    var run=0, layerY={};
+    Object.keys(tall).map(Number).sort(function(a,b){return a-b;}).forEach(function(d){
+      layerY[d]=run+tall[d]/2;
+      run+=tall[d]+52;
+    });
+    var lm={};
+    Object.keys(lastPos).forEach(function(id){
+      var d=Math.round(-lastPos[id].z/layerZ());
+      lastPos[id].y=(layerY[d]||0)-liftOf(id,lm)*liftY();
+    });
+    for(var j=0;j<cards.length;j++){
+      var q=lastPos[cards[j].dataset.id];
+      if(q) cards[j].dataset.pos="translate3d("+q.x+"px,"+q.y+"px,"+q.z+"px)";
+    }
+    if(selectMode){
+      var ks=Object.keys(lastPos), sum={x:0,y:0,z:0};
+      ks.forEach(function(id){ sum.x+=lastPos[id].x; sum.y+=lastPos[id].y; sum.z+=lastPos[id].z; });
+      centre=ks.length?{x:sum.x/ks.length,y:sum.y/ks.length,z:sum.z/ks.length}:{x:0,y:0,z:0};
+    } else {
+      centre=lastPos[selId]||{x:0,y:0,z:0};
+    }
+  }
+
+  /* open or close one page where it sits, without disturbing the camera */
+  function toggleExpand(id){
+    expanded[id]=!expanded[id];
+    var sc=$("scene");
+    var card=sc.querySelector?sc.querySelector('.tnode[data-id="'+id+'"]'):null;
+    if(!card){ drawTree(false); return; }
+    card.classList.toggle("full", !!expanded[id]);
+    card.innerHTML=cardHTML(id);
+    restack();
+    applyView(true);
+  }
+
+  function drawTree(refit){
+    var sc=$("scene"); sc.innerHTML="";
+    var pos=layout();
+    lastPos=pos;
+    if(!selId||!nodes[selId]) selId=curId;
+
+    var onPath={}, x=selectMode?null:nodes[selId];
+    while(x){ onPath[x.id]=true; x=firstParent(x)?nodes[firstParent(x)]:null; }
+
+    Object.keys(pos).forEach(function(id){
+      var p=pos[id];
+      var b=document.createElement("button");
+      b.className="tnode"+(expanded[id]?" full":"")+(nodes[id].status==="dropped"?" done":"")+
+        (id===curId?" cur":"")+
+        (!selectMode&&id===selId?" sel":"")+
+        (picked.indexOf(id)>=0?" pick":"");
+      b.dataset.pos="translate3d("+p.x+"px,"+p.y+"px,"+p.z+"px)";
+      b.dataset.id=id;
+      b.setAttribute("data-id",id);
+      b.innerHTML=cardHTML(id);
+      sc.appendChild(b);
+    });
+
+    restack();
+    if(refit) fitAll();
+
+    wires=[];
+    Object.keys(pos).forEach(function(id){
+      nodes[id].kids.forEach(function(k){
+        if(!pos[k]) return;
+        wires.push({a:id,b:k,hot:onPath[id]&&onPath[k]});
+      });
+    });
+
+    syncSel();
+    syncTreeBar();
+    syncRead();
+    refresh();
+    applyView(true);
+  }
+
+  /* ---------------- notes across selected pages ---------------- */
+  function startTreeNote(useVoice){
+    if(!picked.length) return;
+    treeTarget=picked.slice();
+    if(useVoice&&voiceMode){
+      heard=""; capTxt.textContent="";
+      capEl.classList.add("on"); capEl.style.bottom="40px";
+      startListening();
+      var stop=function(){
+        document.removeEventListener("pointerup",stop);
+        capEl.classList.remove("on");
+        if(listening&&rec){ try{ rec.stop(); }catch(e){} }
+        setTimeout(function(){
+          var said=heard.trim();
+          if(said) addTreeNote(said); else typeTreeNote();
+        },260);
+      };
+      document.addEventListener("pointerup",stop);
+      return;
+    }
+    typeTreeNote();
+  }
+
+  function typeTreeNote(){
+    typeTarget=null;
+    typeQ.textContent=treeTarget.length+" page"+(treeTarget.length>1?"s":"")+" selected";
+    typeTxt.value="";
+    typeEl.classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ typeTxt.focus(); },30);
+  }
+
+  function addTreeNote(text){
+    var ids=(treeTarget&&treeTarget.length?treeTarget:picked).slice();
+    if(!ids.length) return;
+    treeNotes.push({id:nextId++, ids:ids, text:text});
+    treeTarget=null;
+    drawTree();
+  }
+
+  function treePrompt(){
+    if(!treeNotes.length) return "";
+    var used=[];
+    treeNotes.forEach(function(n){ n.ids.forEach(function(i){ if(used.indexOf(i)<0) used.push(i); }); });
+    var out="Below are several pages from a branching conversation, then my notes on them. "+
+            "A note may be about one page or about several at once.\n\n";
+    used.forEach(function(id,i){
+      var n=nodes[id];
+      out+="--- PAGE "+(i+1)+(n.note?" (written in reply to: \u201C"+n.note+"\u201D)":" (the original text)")+" ---\n"+
+           n.text+"\n\n";
+    });
+    out+="--- MY NOTES ---\n";
+    treeNotes.forEach(function(n,i){
+      var refs=n.ids.map(function(id){ return "page "+(used.indexOf(id)+1); }).join(" + ");
+      out+="["+(i+1)+"] on "+refs+"\n    \u2192 "+n.text+"\n\n";
+    });
+    var led=ledger(null);
+    if(led.length) out+="--- THREADS SO FAR ---\n"+led.join("\n")+"\n--- END ---\n\n";
+    out+="--- END NOTES ---\n\n"+mode.tail+
+         " Where a note covers several pages, answer it across all of them rather than page by page."+BLOCK;
+    return out;
+  }
+
+  function attachTreeReplies(raw){
+    var map=parseReply(raw), keep=[], hit=0;
+    treeNotes.forEach(function(n,i){
+      var ans=map[String(i+1)];
+      if(ans){ hit++; makeNode(ans.trim(), n.ids, {note:n.text, quote:""}); }
+      else keep.push(n);
+    });
+    if(!hit){ toast("No numbered answers found"); return; }
+    treeNotes=keep; picked=[];
+    drawTree();
+    toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
+  }
+
+  function syncTreeBar(){
+    $("tselect").textContent=selectMode?"Done selecting":"Select pages";
+    $("tselect").classList.toggle("armed",selectMode);
+    $("tclear").hidden=!picked.length;
+    $("tcount").textContent=
+      picked.length ? picked.length+" selected \u00B7 tap the background to note them"
+      : selectMode  ? "tap pages to select them"
+                    : "tap to centre \u00B7 double-tap to read in full \u00B7 shift-drag to move";
+  }
+
+  /* ---------------- read-through view ---------------- */
+  function drawRead(){
+    var box=$("treeread");
+    box.innerHTML="";
+    var seen={}, order=[];
+
+    (function walk(id,d){
+      if(seen[id]) return;
+      seen[id]=true;
+      order.push({id:id,d:d});
+      nodes[id].kids.forEach(function(k){
+        /* a merge waits until every parent above it has been placed */
+        if(nodes[k].parents.every(function(pp){ return seen[pp]; })) walk(k,d+1);
+      });
+    })(rootId(),0);
+
+    /* anything still unplaced (a merge whose parents sit on other branches) */
+    Object.keys(nodes).forEach(function(id){
+      if(!seen[id]){ seen[id]=true; order.push({id:id,d:1}); }
+    });
+
+    order.forEach(function(o){
+      var nd=nodes[o.id];
+      var wrap=document.createElement("div");
+      wrap.className="rnode"+(o.id===curId?" cur":"")+
+        (nd.parents.length?"":" root")+
+        (nd.status==="resolved"?" resolved":"")+
+        (nd.status==="dropped"?" dropped":"");
+      wrap.style.marginLeft=Math.min(o.d,6)*16+"px";
+
+      var head=document.createElement("button");
+      head.className="rhead";
+      var bits=nd.parents.length?esc(nd.note):"The original text";
+      var meta=[];
+      if(nd.parents.length>1) meta.push("answers a note across "+nd.parents.length+" pages");
+      if(nd.status!=="open") meta.push(nd.status);
+      if(nd.notes.length) meta.push(nd.notes.length+" note"+(nd.notes.length>1?"s":"")+" with no reply yet");
+      if(meta.length) bits+='<span class="rmeta">'+esc(meta.join(" \u00B7 "))+"</span>";
+      head.innerHTML=bits;
+      head.addEventListener("click",function(){
+        $("treeview").hidden=true;
+        focusNode(o.id);
+      });
+
+      var fold=document.createElement("button");
+      fold.className="rfold";
+      fold.textContent=collapsed[o.id]?"\u25B8":"\u25BE";
+      fold.title=(collapsed[o.id]?"Show":"Hide")+" this reply";
+      fold.addEventListener("click",function(ev){
+        ev.stopPropagation();
+        collapsed[o.id]=!collapsed[o.id];
+        drawRead();
+      });
+      wrap.appendChild(fold);
+      wrap.appendChild(head);
+
+      if(nd.quote){
+        var q=document.createElement("span");
+        q.className="rquote";
+        q.textContent="\u201C"+nd.quote+"\u201D";
+        wrap.appendChild(q);
+      }
+
+      var body=document.createElement("div");
+      body.className="rtext"+(collapsed[o.id]?" hid":"");
+      body.textContent=nd.text;
+      wrap.appendChild(body);
+
+      nd.notes.forEach(function(nt){
+        var un=document.createElement("span");
+        un.className="rnote"+(collapsed[o.id]?" hid":"");
+        un.textContent="Still open: "+nt.text;
+        wrap.appendChild(un);
+      });
+
+      box.appendChild(wrap);
+    });
+  }
+
+  function syncRead(){
+    $("treeread").hidden=!readMode;
+    $("treebody").hidden=readMode;
+    $("treebar").hidden=readMode;
+    $("readbtn").textContent=readMode?"Map":"Read all";
+  }
+
+  $("readbtn").addEventListener("click",function(){
+    readMode=!readMode;
+    syncRead();
+    if(readMode) drawRead(); else drawTree();
+  });
+
+  function syncSel(){
+    if(selectMode){
+      $("tsel").textContent="Whole thread";
+      $("treeopen").hidden=true;
+      return;
+    }
+    var n=nodes[selId];
+    if(!n){ $("tsel").textContent=""; $("treeopen").hidden=true; return; }
+    var label=n.parents.length?trim(n.note,60):"The original text";
+    $("tsel").textContent=label+(selId===curId?"  \u00B7 you are here":"");
+    $("treeopen").hidden=(selId===curId);
+  }
+
+  /* drag to turn, pinch or scroll to zoom */
+  var dragging=false, dragged=false, last=null, pinch=0, panning=false, pinchMid=null;
+  var tb=$("treebody");
+
+  var bgHold=null, bgHeld=false, tapId=null, tapAt=0;
+
+  /* The container captures the pointer for drag-to-turn, which means pointerup
+     never reaches a card. So hit-test by coordinates instead of by target. */
+  function cardAt(x,y){
+    var el=document.elementFromPoint(x,y);
+    return el&&el.closest?el.closest(".tnode"):null;
+  }
+
+  tb.addEventListener("contextmenu",function(e){ e.preventDefault(); });
+
+  tb.addEventListener("pointerdown",function(e){
+    /* shift-drag, middle-drag or right-drag slides the whole map without turning it */
+    panning = e.shiftKey || e.button===1 || e.button===2;
+    dragging=true; dragged=false; last={x:e.clientX,y:e.clientY};
+    try{ tb.setPointerCapture(e.pointerId); }catch(err){}
+    bgHeld=false;
+    if(picked.length && !cardAt(e.clientX,e.clientY)){
+      bgHold=setTimeout(function(){
+        if(dragged) return;
+        bgHeld=true;
+        if(navigator.vibrate) navigator.vibrate(8);
+        startTreeNote(true);
+      },420);
+    }
+  });
+  tb.addEventListener("pointermove",function(e){
+    if(!dragging||!last) return;
+    var dx=e.clientX-last.x, dy=e.clientY-last.y;
+    if(Math.abs(dx)+Math.abs(dy)>4) dragged=true;
+    if(dragged) clearTimeout(bgHold);
+    if(panning){
+      view.panX += dx;
+      view.panY += dy;
+    } else {
+      view.yaw += dx*0.35;
+      view.pitch = Math.max(-72, Math.min(72, view.pitch - dy*0.3));
+    }
+    last={x:e.clientX,y:e.clientY};
+    applyView(false);
+  });
+  function endDrag(e){
+    clearTimeout(bgHold);
+    dragging=false; last=null; panning=false;
+    var wasDragged=dragged, wasHeld=bgHeld;
+    bgHeld=false;
+    setTimeout(function(){ dragged=false; },40);
+    if(wasDragged||wasHeld||!e) return;
+
+    var card=cardAt(e.clientX,e.clientY);
+    if(card&&card.dataset.id){
+      var id=card.dataset.id;
+      if(selectMode){
+        var at=picked.indexOf(id);
+        if(at<0) picked.push(id); else picked.splice(at,1);
+        drawTree();          // selection changes, the camera does not
+        return;
+      }
+      var now=Date.now();
+      if(tapId===id && now-tapAt<420){     // second tap: read it in full
+        tapId=null; tapAt=0;
+        toggleExpand(id);
+        return;
+      }
+      tapId=id; tapAt=now;
+      recentre(id);
+      return;
+    }
+    if(picked.length) startTreeNote(false);
+  }
+  tb.addEventListener("pointerup",endDrag);
+  tb.addEventListener("pointercancel",endDrag);
+
+  tb.addEventListener("wheel",function(e){
+    e.preventDefault();
+    view.zoom=Math.max(.25,Math.min(2.2,view.zoom*(e.deltaY>0?0.92:1.08)));
+    applyView(false);
+  },{passive:false});
+
+  tb.addEventListener("touchmove",function(e){
+    if(e.touches.length!==2) return;
+    e.preventDefault();
+    dragged=true;
+    var d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                     e.touches[0].clientY-e.touches[1].clientY);
+    var mid={x:(e.touches[0].clientX+e.touches[1].clientX)/2,
+             y:(e.touches[0].clientY+e.touches[1].clientY)/2};
+    if(pinch) view.zoom=Math.max(.12,Math.min(2.4,view.zoom*(d/pinch)));
+    if(pinchMid){ view.panX+=mid.x-pinchMid.x; view.panY+=mid.y-pinchMid.y; }
+    pinch=d; pinchMid=mid;
+    applyView(false);
+  },{passive:false});
+  tb.addEventListener("touchend",function(){ pinch=0; pinchMid=null; });
+
+  function rootId(){
+    var x=nodes[curId];
+    while(x&&x.parents.length) x=nodes[x.parents[0]];
+    return x?x.id:curId;
+  }
+
+  $("treebtn").addEventListener("click",function(){
+    selId=curId; selectMode=false; picked=[]; readMode=false;
+    squareUp();
+    $("treeview").hidden=false;
+    drawTree(true);
+  });
+
+  $("rootbtn").addEventListener("click",function(){
+    if(selectMode){ selectMode=false; picked=[]; drawTree(false); }
+    recentre(rootId());
+  });
+
+  $("fitbtn").addEventListener("click",function(){
+    selectMode=false; picked=[];
+    drawTree(false);      // rebuild so sizes are current, then search for an angle
+    fitAll();
+    applyView(true);
+  });
+  $("treeclose").addEventListener("click",function(){
+    picked=[]; selectMode=false;
+    $("treeview").hidden=true;
+    refresh();
+  });
+  $("tselect").addEventListener("click",function(){
+    selectMode=!selectMode;
+    if(!selectMode) picked=[];
+    drawTree(true);
+  });
+  $("tclear").addEventListener("click",function(){ picked=[]; drawTree(); });
+
+  $("treeopen").addEventListener("click",function(){
+    if(!selId) return;
+    $("treeview").hidden=true;
+    focusNode(selId);
+  });
+  $("treeclose").addEventListener("click",function(){ $("treeview").hidden=true; });
+  $("up").addEventListener("click",function(){ var n=node(); if(firstParent(n)) focusNode(firstParent(n)); });
+  $("crumb").addEventListener("click",function(){ var n=node(); if(firstParent(n)) focusNode(firstParent(n)); });
+
+  $("miccheck").addEventListener("click",probeMic);
+  $("scroller").addEventListener("scroll",function(){
+    $("scroller").classList.toggle("scrolled",$("scroller").scrollTop>6);
+  });
+
+  syncMode();
+  toEditor();
+  $("reset").addEventListener("click",function(){
+    nodes={}; curId=null; seq=0;
+    notes=[]; words=[]; TOK=[];
+    readerEl.innerHTML="";
+    refresh(); syncNav();
+    toEditor();
+  });
+})();
+</script>
+</body>
+</html>
