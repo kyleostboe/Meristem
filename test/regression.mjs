@@ -327,6 +327,64 @@ console.log('\n"Fit all" puts every page on screen');
   await page.close_();
 }
 
+console.log('\nthe text can be annotated without a pointer');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+
+  const stops = await page.$$eval('.w[tabindex="0"]', ns => ns.length);
+  eq('the reader is a single tab stop', stops, 1);
+
+  await page.locator('.w[data-i="0"]').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  eq('arrows move the cursor',
+     await page.evaluate(() => document.activeElement.dataset.i), '2');
+
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  eq('shift+arrow widens to a phrase', await page.$$eval('.w.live', ns => ns.length), 3);
+
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  check('Enter opens the note box',
+    await page.locator('#typein').evaluate(e => e.classList.contains('on')));
+  await page.fill('#typetxt', 'typed with the keyboard only');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  eq('the note is filed', await sheet(page), ['typed with the keyboard only']);
+  const quote = await page.locator('.note .quote').first().textContent();
+  check('it is anchored to the phrase, not one word',
+        quote.split(/\s+/).length >= 3, quote);
+  await page.close_();
+}
+
+console.log('\noverlays behave like dialogs');
+{
+  const page = await newPage();      // "Paste a thread" only exists before a text is loaded
+  for (const [name, opener, overlay] of [
+    ['import', '#importbtn', '#importin'],
+  ]) {
+    await page.click(opener); await page.waitForTimeout(300);
+    check(`${name} opens`, await page.locator(overlay).evaluate(e => e.classList.contains('on')));
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    check(`${name} closes on Escape`,
+      !(await page.locator(overlay).evaluate(e => e.classList.contains('on'))));
+    eq(`${name} hands focus back`,
+       await page.evaluate(() => document.activeElement.id), opener.slice(1));
+  }
+  await page.close_();
+}
+
+console.log('\npinch-zoom is not blocked');
+{
+  const page = await newPage();
+  const vp = await page.getAttribute('meta[name=viewport]', 'content');
+  check('no user-scalable=no', !/user-scalable\s*=\s*no/.test(vp), vp);
+  check('no maximum-scale', !/maximum-scale/.test(vp), vp);
+  await page.close_();
+}
+
 /* ---------- done ---------- */
 
 await browser.close();

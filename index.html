@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- No maximum-scale or user-scalable=no: this is a reading app, and pinch-zoom
+     is exactly the thing a reader reaches for. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Annotate prose in place — hold a word to speak a note right there — and branch the conversation out of your notes.">
+<meta name="theme-color" content="#E9ECF2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12171F" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#127793;</text></svg>">
 <title>Meristem — talk in the text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,13 +22,46 @@
     --rule:#D9DEE8;
     --mark:#CF2E4B;
     --hi:#FFE066;
+    --hi-ink:#141B2D;
     --sheet:#0F1524;
+    --on-sheet:#F4F6FB;
+    --on-sheet-dim:#9AA6C0;
+    --on-sheet-faint:#59637E;
+    --on-mark:#FFFFFF;
+    --ghost:#9AA3B6;   /* placeholder text */
+    --hover:#F1F3F7;   /* menu row hover */
+    --pickbg:#FFF6DA;  /* a selected page in the map */
+    --wire:#7A879F;
     --r-s:5px;
     --r-m:9px;
     --r-l:11px;
     --pill:7px;
     --lift:0 10px 30px rgba(20,27,45,.10);
     --lift-lg:0 18px 46px rgba(20,27,45,.16);
+  }
+  /* The palette is the only thing that changes; every rule below reads from it. */
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#12171F;
+      --card:#1B222D;
+      --ink:#E7ECF4;
+      --muted:#93A0B8;
+      --rule:#2C3542;
+      --mark:#FF6B84;
+      --hi:#7A6320;
+      --hi-ink:#FFF3C4;
+      --sheet:#070A11;
+      --on-sheet:#F4F6FB;
+      --on-sheet-dim:#93A0B8;
+      --on-sheet-faint:#5A6478;
+      --on-mark:#1B222D;
+      --ghost:#5E6B82;
+      --hover:#242C39;
+      --pickbg:#3A3116;
+      --wire:#5C6980;
+      --lift:0 10px 30px rgba(0,0,0,.34);
+      --lift-lg:0 18px 46px rgba(0,0,0,.46);
+    }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
@@ -84,7 +123,7 @@
   .reader.editing{user-select:text;-webkit-user-select:text;outline:none;min-height:200px}
   .reader.editing p{border-left-color:var(--ink)}
   .reader.editing[data-empty="1"] p:first-child::before{
-    content:attr(data-ph);color:#9AA3B6;pointer-events:none;
+    content:attr(data-ph);color:var(--ghost);pointer-events:none;
     font:inherit;font-size:inherit;line-height:inherit;letter-spacing:inherit;
   }
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -94,25 +133,50 @@
   .reader{
     font-size:19px;line-height:2.05;letter-spacing:.002em;
     padding:0 0 200px;
+    /* Touch needs this off: a long press is the annotate gesture, and without
+       it the browser's own selection callout fires instead. A mouse has no such
+       conflict, so there the text stays selectable and copyable. */
     user-select:none;-webkit-user-select:none;
+  }
+  @media (hover:hover) and (pointer:fine){
+    .reader{user-select:text;-webkit-user-select:text}
+    body.gesturing .reader{user-select:none;-webkit-user-select:none}
+  }
+  .w:focus-visible{
+    outline:2px solid var(--mark);outline-offset:2px;border-radius:var(--r-s);
+  }
+  .kbhint{
+    font-family:"Newsreader",Georgia,serif;font-size:12px;line-height:1.6;
+    color:var(--muted);margin:0 0 14px;
   }
   #setup{display:flex;flex-direction:column;gap:16px}
   .reader p{margin:0 0 2.05em;padding-left:16px;border-left:3px solid var(--rule)}
   .w{border-radius:var(--r-s);padding:1px 0}
-  .w.live{background:var(--hi);box-shadow:0 0 0 3px var(--hi);border-radius:var(--r-s)}
+  .w.live{background:var(--hi);color:var(--hi-ink);box-shadow:0 0 0 3px var(--hi);border-radius:var(--r-s)}
   .w.annot{
     text-decoration:underline;
     text-decoration-color:var(--mark);
     text-underline-offset:5px;
     text-decoration-thickness:2px;
   }
+  /* An open note and an answered one are different states, so they get
+     different shapes rather than two shades of the same red — a bare numeral
+     for a note still waiting, a filled disc once a reply is attached. */
   sup.mk{
     font-family:"Newsreader",Georgia,serif;font-size:10px;font-weight:500;
     color:var(--mark);vertical-align:super;line-height:0;padding-left:2px;
   }
+  sup.mk.ans{
+    display:inline-block;min-width:12px;height:12px;line-height:12px;
+    text-align:center;border-radius:6px;
+    background:var(--mark);color:var(--on-mark);
+    font-size:8.5px;font-weight:700;padding:0 2px;margin-left:2px;
+    /* Sits on the x-height rather than the cap line, so it clears the line above. */
+    vertical-align:.32em;
+  }
   .w.done{
     text-decoration:underline;
-    text-decoration-color:#9AA6C0;
+    text-decoration-color:var(--muted);
     text-decoration-style:dotted;
     text-underline-offset:5px;
   }
@@ -132,7 +196,6 @@
     font-family:"Newsreader",Georgia,serif;font-size:13px;color:var(--muted);
     margin:2.6em 0 .3em;padding-top:1.4em;border-top:1px solid var(--rule);
   }
-  .mk.ans{color:var(--mark);font-weight:700}
   .rnum{
     display:inline-block;min-width:15px;color:var(--mark);font-weight:700;
   }
@@ -189,10 +252,10 @@
   }
   .tcount{flex:1;min-width:0;color:var(--muted)}
   #tselect.armed{color:var(--mark)}
-  .tnode.pick{border-left-color:var(--mark);background:#FFF6DA}
+  .tnode.pick{border-left-color:var(--mark);background:var(--pickbg)}
   .tnode .tnum{
     position:absolute;top:-9px;right:-9px;min-width:20px;height:20px;line-height:20px;
-    text-align:center;border-radius:50%;background:var(--mark);color:#fff;
+    text-align:center;border-radius:50%;background:var(--mark);color:var(--on-mark);
     font-size:11px;font-weight:700;
   }
   #treeopen{color:var(--mark)}
@@ -294,23 +357,23 @@
     position:absolute;inset:0;width:100%;height:100%;
     pointer-events:none;overflow:visible;
   }
-  .wires line{stroke:#7A879F;stroke-width:2.2;stroke-linecap:round}
+  .wires line{stroke:var(--wire);stroke-width:2.2;stroke-linecap:round}
   .wires line.hot{stroke:var(--mark);stroke-width:3.2}
 
   /* floating live caption */
   .caption{
     position:fixed;z-index:60;left:12px;right:12px;
     max-width:616px;margin:0 auto;
-    background:var(--sheet);color:#fff;border-radius:var(--r-m);
+    background:var(--sheet);color:var(--on-sheet);border-radius:var(--r-m);
     padding:14px 16px;font-family:"Newsreader",Georgia,serif;font-size:13px;line-height:1.55;
     display:none;box-shadow:0 16px 44px rgba(15,21,36,.38);
   }
   .caption.on{display:block}
-  .caption .rec{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9AA6C0;margin-bottom:7px}
+  .caption .rec{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-sheet-dim);margin-bottom:7px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--mark);animation:pulse 1s infinite}
   @keyframes pulse{50%{opacity:.25}}
-  .caption .txt{min-height:1.5em;color:#F4F6FB}
-  .caption .txt:empty::after{content:"listening…";color:#59637E}
+  .caption .txt{min-height:1.5em;color:var(--on-sheet)}
+  .caption .txt:empty::after{content:"listening…";color:var(--on-sheet-faint)}
 
 
   /* ---------- bottom sheet ---------- */
@@ -360,10 +423,10 @@
   .mitem:last-child{border-bottom:0}
   .mitem .n{font-size:15px;font-weight:700;letter-spacing:.002em;color:var(--ink);display:block;margin-bottom:2px}
   .mitem .d{font-size:11.5px;line-height:1.5;color:var(--muted);display:block}
-  .mitem:hover{background:#F1F3F7}
+  .mitem:hover{background:var(--hover)}
   .mitem.on{background:var(--ink)}
-  .mitem.on .n{color:#fff}
-  .mitem.on .d{color:#A8B2C6}
+  .mitem.on .n{color:var(--paper)}
+  .mitem.on .d{color:var(--muted)}
 
 
 
@@ -382,7 +445,7 @@
 
   .toast{
     position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:80;
-    background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--pill);
+    background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:var(--pill);
     box-shadow:var(--lift-lg);
     font-family:"Newsreader",Georgia,serif;font-size:14px;letter-spacing:.002em;
     opacity:0;transition:opacity .2s;pointer-events:none;
@@ -402,6 +465,29 @@
   .typein .card{background:var(--card);width:100%;max-width:640px;margin:0 auto;padding:22px 20px 20px;border-radius:var(--r-l) var(--r-l) 0 0;box-shadow:var(--lift-lg)}
   .typein .q{font-size:15px;font-style:italic;color:var(--muted);margin:0 0 10px}
   .typein textarea{width:100%;min-height:88px;border:1px solid var(--rule);transition:border-color .15s,box-shadow .15s;border-radius:var(--r-s);padding:13px;font-family:"Newsreader",Georgia,serif;font-size:14px;line-height:1.5;resize:none;background:var(--paper);color:var(--ink)}
+
+  /* Once a text is open the standing instructions have done their job; the
+     screen is better spent on the text. They come back in the editor. */
+  body.reading .head{display:none}
+
+  /* A word joined to the next one in the same run carries the space between
+     them, so the underline runs unbroken across a phrase instead of breaking
+     at every gap. */
+  .w.cont{margin-right:-0.26em;padding-right:0.26em}
+
+  /* Below ~430px the five top-bar controls no longer fit, and the last of them
+     used to be pushed off-screen with no way to reach it. */
+  @media (max-width:430px){
+    .topbar{gap:6px;padding:0 12px}
+    .acts{gap:7px}
+    .tbtn,.btn,.mini,.topbar .reset{font-size:13px;padding:10px 3px}
+    body.reading .wordmark{display:none}
+    .treehead,.treebar{gap:10px;padding-left:14px;padding-right:14px}
+    .treehead{font-size:13px}
+  }
+  @media (max-width:340px){
+    .wordmark{display:none}
+  }
 
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
@@ -428,7 +514,7 @@
     <p>Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.</p>
   </div>
 
-  <div class="scroller" id="scroller">
+  <main class="scroller" id="scroller">
   <section class="paste" id="paste">
     <div class="reader" id="reader" data-ph="Paste here…"></div>
     <div id="setup">
@@ -441,7 +527,7 @@
       <p class="micnote" id="micnote" hidden></p>
     </div>
   </section>
-  </div>
+  </main>
 </div>
 
 
@@ -450,7 +536,7 @@
   <div class="txt" id="captxt"></div>
 </div>
 
-<div class="treeview" id="treeview" hidden>
+<div class="treeview" id="treeview" role="dialog" aria-modal="true" aria-label="Thread map" hidden>
   <div class="treehead">
     <span class="tsel" id="tsel"></span>
     <button class="reset" id="rootbtn">Root</button>
@@ -471,13 +557,13 @@
   </div>
 </div>
 
-<div class="modemenu" id="modemenu" hidden></div>
+<div class="modemenu" id="modemenu" role="menu" aria-label="Response mode" hidden></div>
 
 <!-- SHEET -->
 <div class="sheet empty" id="sheet">
   <div class="grab" id="grab" role="button" tabindex="0">
     <span class="count" id="count">0</span>
-    <button class="mini" id="modebtn">Respond &#9662;</button>
+    <button class="mini" id="modebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="modemenu">Respond &#9662;</button>
     <span class="chev" id="chev">&#9650;</span>
     <div class="baracts">
       <button class="mini" id="ctxbar">Context: path</button>
@@ -492,9 +578,9 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<div class="typein" id="importin">
+<div class="typein" id="importin" role="dialog" aria-modal="true" aria-labelledby="importq">
   <div class="card">
     <p class="q" id="importq">Drop a thread file here, or paste it below. This replaces whatever is open.</p>
     <textarea id="importtxt" placeholder="Paste the thread data here…"></textarea>
@@ -507,9 +593,9 @@
   </div>
 </div>
 
-<div class="typein" id="replyin">
+<div class="typein" id="replyin" role="dialog" aria-modal="true" aria-labelledby="replyq">
   <div class="card">
-    <p class="q">Paste the whole reply. Only the notes block gets read.</p>
+    <p class="q" id="replyq">Paste the whole reply. Only the notes block gets read.</p>
     <textarea id="replytxt" placeholder="Paste the AI's response here…"></textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn" id="replysave">Attach replies</button>
@@ -518,7 +604,7 @@
   </div>
 </div>
 
-<div class="typein" id="typein">
+<div class="typein" id="typein" role="dialog" aria-modal="true" aria-labelledby="typeq">
   <div class="card">
     <p class="q" id="typeq"></p>
     <textarea id="typetxt" placeholder="Type, or tap the mic key on your keyboard and talk… Enter saves, Shift+Enter for a new line."></textarea>
@@ -599,8 +685,10 @@
   function focusNode(id){
     curId=id;
     tokenize();
+    kbA=kbB=-1;
     readerEl.classList.remove("editing");
     readerEl.removeAttribute("contenteditable");
+    document.body.classList.add("reading");
     $("setup").hidden=true;
     $("reset").hidden=false; $("edit").hidden=false; $("go").hidden=true;
     $("exportbtn").hidden=false;
@@ -836,17 +924,29 @@
               "</div>"+
             "</div>";
     }
+    /* Exactly one word carries tabindex 0 so the reader is a single tab stop,
+       and the arrow keys move within it from there. */
+    if(kbA<0||kbA>=words.length) kbA=kbB=words.length?0:-1;
     var cp=-1;
     words.forEach(function(w,i){
       if(w.p!==cp){
         if(cp!==-1) html+="</p>";
         html+="<p>"; cp=w.p;
       }
-      var cls="w"+(annotated[i]?" annot":"")+(done[i]&&!annotated[i]?" done":"");
-      html+='<span class="'+cls+'" data-i="'+i+'">'+esc(w.t)+"</span>";
+      /* Carry the following space inside the span while the run continues, so
+         a phrase gets one unbroken underline rather than one per word. A mark
+         sits between the words, which ends the run. */
+      var marked=marksAt[i]||replyMark[i];
+      var cont=!marked && i+1<words.length && words[i+1].p===w.p &&
+               ((annotated[i]&&annotated[i+1]) ||
+                (done[i]&&done[i+1]&&!annotated[i]&&!annotated[i+1]));
+      var cls="w"+(annotated[i]?" annot":"")+(done[i]&&!annotated[i]?" done":"")+
+              (cont?" cont":"");
+      html+='<span class="'+cls+'" data-i="'+i+'" tabindex="'+(i===kbA?"0":"-1")+'">'+
+            esc(w.t)+(cont?" ":"")+"</span>";
       if(marksAt[i]) html+='<sup class="mk">'+marksAt[i].join(",")+"</sup>";
       if(replyMark[i]) html+='<sup class="mk ans">'+replyMark[i].join(",")+"</sup>";
-      html+=" ";
+      if(!cont) html+=" ";
     });
     if(cp!==-1) html+="</p>";
 
@@ -868,6 +968,7 @@
   var promptDirty=false;
   var CTX=["path","page","all"], ctxMode="path";
   var timer=null, engaged=false, startPt=null, anchorA=-1, anchorB=-1, tapIdx=-1;
+  var kbA=-1, kbB=-1;   // keyboard cursor / selection over the same words
 
   function wordAt(x,y){
     var el=document.elementFromPoint(x,y);
@@ -891,6 +992,60 @@
   readerEl.addEventListener("input",function(){
     if(readerEl.classList.contains("editing"))
       readerEl.dataset.empty=readSurface().trim()?"0":"1";
+  });
+
+  /* ---------------- keyboard annotation ----------------
+     Holding and dragging is the whole interaction, which left the app unusable
+     without a pointer. The same two moves — pick a word, widen to a phrase —
+     are here on the arrow keys, with one tab stop into the text. */
+  function wordEl(i){ return readerEl.querySelector('.w[data-i="'+i+'"]'); }
+
+  function kbGo(i,extend){
+    if(!words.length) return;
+    i=Math.max(0,Math.min(i,words.length-1));
+    kbB=i;
+    if(!extend) kbA=i;
+    var all=readerEl.querySelectorAll(".w");
+    var lo=Math.min(kbA,kbB), hi=Math.max(kbA,kbB);
+    for(var k=0;k<all.length;k++){
+      var idx=parseInt(all[k].dataset.i,10);
+      all[k].classList.toggle("live", extend && idx>=lo && idx<=hi);
+      all[k].setAttribute("tabindex", idx===kbA?"0":"-1");
+    }
+    var el=wordEl(i);
+    if(el){ el.setAttribute("tabindex","0"); el.focus({preventScroll:false}); }
+  }
+
+  readerEl.addEventListener("focusin",function(e){
+    var t=e.target;
+    if(!t.classList||!t.classList.contains("w")) return;
+    var i=parseInt(t.dataset.i,10);
+    if(!isNaN(i) && i!==kbA && i!==kbB){ kbA=kbB=i; }
+  });
+
+  readerEl.addEventListener("keydown",function(e){
+    if(readerEl.classList.contains("editing")) return;
+    var t=e.target;
+    if(!t.classList||!t.classList.contains("w")) return;
+    var i=parseInt(t.dataset.i,10);
+    if(isNaN(i)) return;
+
+    if(e.key==="ArrowRight"||e.key==="ArrowDown"){
+      e.preventDefault(); kbGo(kbB+1,e.shiftKey); return;
+    }
+    if(e.key==="ArrowLeft"||e.key==="ArrowUp"){
+      e.preventDefault(); kbGo(kbB-1,e.shiftKey); return;
+    }
+    if(e.key==="Home"){ e.preventDefault(); kbGo(0,e.shiftKey); return; }
+    if(e.key==="End"){ e.preventDefault(); kbGo(words.length-1,e.shiftKey); return; }
+    if(e.key==="Enter"||e.key===" "){
+      e.preventDefault();
+      var lo=Math.min(kbA,kbB), hi=Math.max(kbA,kbB);
+      paintRange(lo,hi);
+      askType({s:lo,e:hi});
+      return;
+    }
+    if(e.key==="Escape"){ kbA=kbB=i; clearLive(); }
   });
 
   readerEl.addEventListener("click",function(e){
@@ -923,6 +1078,7 @@
     clearTimeout(timer);
     timer=setTimeout(function(){
       engaged=true; anchorA=anchorB=idx;
+      document.body.classList.add("gesturing");
       try{ readerEl.setPointerCapture(e.pointerId); }catch(err){}
       paintLive();
       capEl.classList.add("on");
@@ -950,6 +1106,7 @@
 
   function release(){
     clearTimeout(timer);
+    document.body.classList.remove("gesturing");
     if(!engaged){
       if(startPt&&tapIdx>=0){ paintRange(tapIdx,tapIdx); askType({s:tapIdx,e:tapIdx}); }
       startPt=null; tapIdx=-1;
@@ -1215,7 +1372,7 @@
 
   function setMode(m){
     mode=m; syncMode(); prevEl.value=buildPrompt(); promptDirty=false;
-    $("modemenu").hidden=true;
+    showMenu(false);
   }
   function drawMenu(){
     var box=$("modemenu"); box.innerHTML="";
@@ -1239,24 +1396,22 @@
     typeTarget={id:p.id==null?curId:p.id, s:p.s, e:p.e};
     typeQ.textContent="\u201C"+span(p.s,p.e)+"\u201D";
     typeTxt.value="";
-    typeEl.classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ typeTxt.focus(); },30);
+    openOverlay(typeEl,typeTxt);
   }
   /* Both targets have to be cleared together. Leaving treeTarget set after a
      discarded cross-page note meant the next ordinary note was filed against
      the map selection instead of the page — invisible until you reopened the
      map, and it healed itself after one note, so it read as random. */
   function closeType(){
-    typeEl.classList.remove("on");
     typeTarget=null; treeTarget=null;
     clearLive();
+    closeOverlay(typeEl);
   }
   $("typesave").addEventListener("click",function(){
     var v=typeTxt.value.trim();
     var tt=typeTarget, tr=treeTarget;
-    typeEl.classList.remove("on");
     typeTarget=null; treeTarget=null;
+    closeOverlay(typeEl);
     if(v&&tr){ treeTarget=tr; addTreeNote(v); treeTarget=null; }
     else if(v&&tt){ addNote(tt.s,tt.e,v,tt.id); }
     else clearLive();
@@ -1332,6 +1487,49 @@
     setTimeout(function(){ toastEl.classList.remove("on"); },1600);
   }
 
+  /* ---------------- overlays ----------------
+     All three cards are modal, so they need the same three things: keep the
+     keyboard inside while open, close on Escape, and hand focus back to
+     whatever opened them. Only the typing card had any of it. */
+  var lastFocus=null;
+
+  function openOverlay(el,focusEl){
+    lastFocus=document.activeElement;
+    el.classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ if(focusEl) focusEl.focus(); },30);
+  }
+  function closeOverlay(el){
+    el.classList.remove("on");
+    var back=lastFocus; lastFocus=null;
+    if(back&&back.focus&&document.contains(back)) back.focus({preventScroll:true});
+  }
+  function openOverlays(){
+    return ["typein","importin","replyin"].map($).filter(function(el){
+      return el.classList.contains("on");
+    });
+  }
+
+  /* Tab must not walk out of a modal card and into the page behind it. */
+  document.addEventListener("keydown",function(e){
+    var open=openOverlays();
+    if(!open.length) return;
+    var el=open[open.length-1];
+    if(e.key==="Escape"){
+      e.preventDefault();
+      if(el.id==="typein") closeType(); else closeOverlay(el);
+      return;
+    }
+    if(e.key!=="Tab") return;
+    var f=el.querySelectorAll("button, textarea, input:not([type=hidden]), [href], [tabindex]:not([tabindex='-1'])");
+    var can=[];
+    for(var i=0;i<f.length;i++) if(f[i].offsetParent!==null||f[i]===document.activeElement) can.push(f[i]);
+    if(!can.length) return;
+    var first=can[0], last=can[can.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  });
+
   function legacyCopy(txt){
     var ta=document.createElement("textarea");
     ta.value=txt;
@@ -1371,17 +1569,19 @@
 
   function openReply(){
     treeReplyMode=inTree();
-    $("replytxt").value=""; $("replyin").classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ $("replytxt").focus(); },30);
+    $("replytxt").value="";
+    openOverlay($("replyin"),$("replytxt"));
   }
 
+  function showMenu(on){
+    $("modemenu").hidden=!on;
+    $("modebtn").setAttribute("aria-expanded",on?"true":"false");
+  }
   $("modebtn").addEventListener("click",function(e){
     e.stopPropagation();
-    var mm=$("modemenu");
-    mm.hidden=!mm.hidden;
+    showMenu($("modemenu").hidden);
   });
-  document.addEventListener("click",function(){ $("modemenu").hidden=true; });
+  document.addEventListener("click",function(){ showMenu(false); });
 
   function syncCtx(){
     var n=node(), deep=n&&n.parents.length;
@@ -1553,16 +1753,14 @@
 
   $("importbtn").addEventListener("click",function(){
     $("importtxt").value="";
-    $("importin").classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ $("importtxt").focus(); },30);
+    openOverlay($("importin"),$("importtxt"));
   });
   $("importsave").addEventListener("click",function(){
     var v=$("importtxt").value.trim();
     if(!v) return;
-    if(importTree(v)) $("importin").classList.remove("on");
+    if(importTree(v)) closeOverlay($("importin"));
   });
-  $("importcancel").addEventListener("click",function(){ $("importin").classList.remove("on"); });
+  $("importcancel").addEventListener("click",function(){ closeOverlay($("importin")); });
 
   /* ---- drag and drop a thread file ---- */
   function readThreadFile(f){
@@ -1570,7 +1768,7 @@
     if(f.size>8*1024*1024){ toast("That file is too big"); return; }
     var r=new FileReader();
     r.onload=function(){
-      if(importTree(String(r.result))) $("importin").classList.remove("on");
+      if(importTree(String(r.result))) closeOverlay($("importin"));
     };
     r.onerror=function(){ toast("Couldn't read that file"); };
     r.readAsText(f);
@@ -1622,7 +1820,7 @@
   });
   $("importin").addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
-    if(e.target===$("importin")) $("importin").classList.remove("on");
+    if(e.target===$("importin")) closeOverlay($("importin"));
   });
 
   /* Import already takes a dropped file, so export should produce one. Falls
@@ -1698,15 +1896,15 @@
   });
   $("replysave").addEventListener("click",function(){
     var v=$("replytxt").value;
-    $("replyin").classList.remove("on");
+    closeOverlay($("replyin"));
     if(!v.trim()){ treeReplyMode=false; return; }
     if(treeReplyMode){ treeReplyMode=false; attachTreeReplies(v); }
     else attachReplies(v);
   });
-  $("replycancel").addEventListener("click",function(){ $("replyin").classList.remove("on"); });
+  $("replycancel").addEventListener("click",function(){ closeOverlay($("replyin")); });
   $("replyin").addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
-    if(e.target===$("replyin")) $("replyin").classList.remove("on");
+    if(e.target===$("replyin")) closeOverlay($("replyin"));
   });
 
   function readSurface(){
@@ -1729,6 +1927,7 @@
     readerEl.setAttribute("contenteditable","true");
     readerEl.classList.add("editing");
     readerEl.dataset.empty=readSurface().trim()?"0":"1";
+    document.body.classList.remove("reading");
     $("setup").hidden=false;
     $("edit").hidden=true; $("reset").hidden=true; $("go").hidden=false;
     sheetEl.classList.remove("open"); chevEl.innerHTML="\u25B2";
@@ -2205,9 +2404,7 @@
     typeTarget=null;
     typeQ.textContent=treeTarget.length+" page"+(treeTarget.length>1?"s":"")+" selected";
     typeTxt.value="";
-    typeEl.classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ typeTxt.focus(); },30);
+    openOverlay(typeEl,typeTxt);
   }
 
   function addTreeNote(text){
