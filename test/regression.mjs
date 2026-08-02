@@ -385,6 +385,76 @@ console.log('\npinch-zoom is not blocked');
   await page.close_();
 }
 
+console.log('\nthe notes basket carries across pages');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'ROOT A');
+  await type(page, 30, 'ROOT B');
+  await reply(page, '[[notes]]\n1 → the reply to A\n[[/notes]]');
+  eq('the unanswered root note remains', await sheet(page), ['ROOT B']);
+
+  await page.locator('.rhead').first().click(); await page.waitForTimeout(500);
+  eq('it is still there on the reply page', await sheet(page), ['ROOT B']);
+
+  await type(page, 1, 'CHILD C');
+  eq('and the new note joins it', await sheet(page), ['ROOT B', 'CHILD C']);
+  eq('the badge counts the whole basket',
+     await page.locator('#count').textContent(), '2');
+
+  // the number beside a word must match the number in the prompt
+  const marks = await page.$$eval('#reader sup.mk:not(.ans)', ns => ns.map(n => n.textContent));
+  eq('marks use the basket numbering, not per-page', marks, ['2']);
+
+  const prompt = await page.locator('#preview').inputValue();
+  check('both pages go in whole',
+    /--- PAGE 1 \(the original text\) ---/.test(prompt) && /--- PAGE 2 \(/.test(prompt), prompt.slice(0, 300));
+  check('note 1 is tagged to page 1', /\[1\] on page 1, /.test(prompt));
+  check('note 2 is tagged to page 2', /\[2\] on page 2, /.test(prompt));
+  check('the root text is present', prompt.includes('The bottleneck'));
+  check('the reply text is present', prompt.includes('the reply to A'));
+  check('notes being asked are not also repeated as ledger lines',
+    !/Open \(no reply yet\): ROOT B/.test(prompt));
+
+  // one reply, answers routed to two different pages
+  await reply(page, '[[notes]]\n1 → answer to ROOT B\n2 → answer to CHILD C\n[[/notes]]');
+  eq('the basket empties', await sheet(page), []);
+  const s = await state(page);
+  const root = s.nodes.find(n => !n.parents.length);
+  const child = s.nodes.find(n => n.note === 'ROOT A');
+  const byNote = t => s.nodes.find(n => n.note === t);
+  eq('the answer to the root note hangs off the root',
+     byNote('ROOT B').parents, [root.id]);
+  eq('the answer to the child note hangs off the child',
+     byNote('CHILD C').parents, [child.id]);
+  eq('no exceptions', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nthe scope switch narrows to one page');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'ROOT A');
+  await type(page, 30, 'ROOT B');
+  await reply(page, '[[notes]]\n1 → the reply to A\n[[/notes]]');
+  await page.locator('.rhead').first().click(); await page.waitForTimeout(500);
+  await type(page, 1, 'CHILD C');
+  eq('all pages by default', await sheet(page), ['ROOT B', 'CHILD C']);
+
+  await page.click('#grab'); await page.waitForTimeout(300);
+  await page.click('#scopebar'); await page.waitForTimeout(400);
+  eq('narrowed to this page', await sheet(page), ['CHILD C']);
+  eq('the button says so', await page.locator('#scopebar').textContent(), 'This page');
+
+  const prompt = await page.locator('#preview').inputValue();
+  check('and the prompt is single-page again', !/--- PAGE 1 \(/.test(prompt), prompt.slice(0, 160));
+
+  await page.click('#scopebar'); await page.waitForTimeout(400);
+  eq('and back again', await sheet(page), ['ROOT B', 'CHILD C']);
+  await page.close_();
+}
+
 /* ---------- done ---------- */
 
 await browser.close();

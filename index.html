@@ -395,7 +395,17 @@
   .grab .count{color:var(--ink);font-weight:500;flex:0 0 auto;min-width:14px;text-align:center}
   .grab .chev{color:var(--muted);font-size:13px;flex:0 0 auto;padding:0 2px;margin-left:auto}
   .mini{flex:0 0 auto}
-  .baracts{flex:1 0 100%;display:flex;gap:8px}
+  .baracts{flex:1 0 100%;display:flex;gap:8px;flex-wrap:wrap}
+  #scopebar.narrow{color:var(--muted)}
+  #scopebar{color:var(--ink);font-weight:700}
+  .note .onpage{
+    display:block;background:none;border:0;padding:0;margin:0 0 3px;cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;letter-spacing:.02em;
+    color:var(--mark);text-align:left;
+  }
+  .note .onpage.here{color:var(--muted);cursor:default}
+  .note .onpage:hover{text-decoration:underline}
+  .note .onpage.here:hover{text-decoration:none}
   .sheetbody{overflow:auto;padding:0 20px 22px;-webkit-overflow-scrolling:touch}
 
   .note{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--rule)}
@@ -566,6 +576,7 @@
     <button class="mini" id="modebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="modemenu">Respond &#9662;</button>
     <span class="chev" id="chev">&#9650;</span>
     <div class="baracts">
+      <button class="mini" id="scopebar">All pages</button>
       <button class="mini" id="ctxbar">Context: path</button>
       <button class="mini solid" id="copybar">Copy prompt</button>
       <button class="mini" id="peekbar">Preview</button>
@@ -645,6 +656,73 @@
   function pageNotes(id){
     var n=nodes[id==null?curId:id];
     return n?n.notes:[];
+  }
+
+  /* ---------------- the notes basket ----------------
+     Notes live on the page whose words they mark, but you build them up while
+     reading across several pages, and they have to leave as one prompt. The
+     sheet is therefore a view over every open note in the thread, not over the
+     page you happen to be standing on. */
+  var noteScope="thread";   // "thread" | "page"
+
+  /* Reading order: the original, then each reply depth-first — the order "Read
+     all" uses, and the order the notes were made in. A note's number has to
+     mean the same thing in the text, in the sheet and in the prompt. */
+  function orderedPages(){
+    var seen={}, out=[];
+    (function walk(id){
+      if(!id||seen[id]||!nodes[id]) return;
+      seen[id]=true;
+      out.push(id);
+      nodes[id].kids.forEach(function(k){
+        if(nodes[k]&&nodes[k].parents.every(function(p){ return seen[p]; })) walk(k);
+      });
+    })(rootId());
+    Object.keys(nodes).forEach(function(id){ if(!seen[id]){ seen[id]=true; out.push(id); } });
+    return out;
+  }
+
+  /* Tokens for a page that isn't the one on screen, so its notes can be quoted
+     against their own words. Cached per page and thrown away when its text
+     changes. */
+  var tokCache={};
+  function toksFor(id){
+    var n=nodes[id];
+    if(!n) return [];
+    var c=tokCache[id];
+    if(c&&c.text===n.text) return c.toks;
+    var t=tokensOf(n.text);
+    tokCache[id]={text:n.text,toks:t};
+    return t;
+  }
+
+  /* Every open note in the thread as {pid, note}, numbered by position. */
+  function threadEntries(){
+    var out=[];
+    orderedPages().forEach(function(pid){
+      nodes[pid].notes.forEach(function(nt){ out.push({pid:pid,note:nt}); });
+    });
+    return out;
+  }
+
+  function noteEntries(){
+    if(inTree()) return treeNotes.map(function(n){ return {pid:null,note:n}; });
+    if(noteScope==="page") return pageNotes().map(function(n){ return {pid:curId,note:n}; });
+    return threadEntries();
+  }
+
+  /* note id -> the number it shows everywhere. Ids are unique across the whole
+     thread, so one lookup serves the text, the sheet and the prompt. */
+  function noteNumbers(){
+    var map={};
+    noteEntries().forEach(function(e,i){ map[e.note.id]=i+1; });
+    return map;
+  }
+
+  function pageLabel(id,n){
+    var x=nodes[id];
+    if(!x) return "a page";
+    return x.parents.length?trim(x.note,40):"the original text";
   }
 
   function makeNode(text,parentIds,meta){
@@ -848,9 +926,12 @@
   function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
   function render(){
+    /* The number beside a word is the number the AI will answer, so it comes
+       from the basket, not from this page's position in it. */
+    var num=noteNumbers();
     var marksAt={}, annotated={}, done={}, kidsByPara={};
     pageNotes().forEach(function(n,i){
-      (marksAt[n.e]=marksAt[n.e]||[]).push(i+1);
+      (marksAt[n.e]=marksAt[n.e]||[]).push(num[n.id]||(i+1));
       for(var k=n.s;k<=n.e;k++) annotated[k]=true;
     });
     var n=node();
@@ -1213,31 +1294,42 @@
     return {answers:map, fenced:fenced};
   }
 
+  /* Answers come back numbered against the basket, and the basket spans pages,
+     so each answer has to be routed to the page its own note sits on. One
+     pasted reply can therefore grow branches in several places at once. */
   function attachReplies(raw){
     var parsed=parseReply(raw), map=parsed.answers;
-    var notes=pageNotes();
-    var found=notes.filter(function(n,i){ return map[String(i+1)]; }).length;
+    var list=noteEntries();
+    var found=list.filter(function(e,i){ return map[String(i+1)]; }).length;
     if(!found){ toast("No numbered answers found"); return; }
     if(!parsed.fenced &&
        !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
                 "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
 
-    var keep=[], hit=0;
-    var limit=Math.max(0,TOK.length-1);
-    notes.forEach(function(n,i){
+    var hit=0, kept=0, touched={}, drop={};
+    list.forEach(function(e,i){
       var ans=map[String(i+1)];
-      if(ans){
-        hit++;
-        var at=Math.max(0,Math.min(n.e|0,limit));
-        makeNode(ans.trim(),curId,{
-          quote:quoteFor(n), note:n.text, s:n.s, e:n.e,
-          para:TOK[at]?TOK[at].p:0
-        });
-      } else keep.push(n);
+      if(!ans){ kept++; return; }
+      var pid=e.pid, n=e.note, toks=toksFor(pid);
+      var at=Math.max(0,Math.min(n.e|0,Math.max(0,toks.length-1)));
+      makeNode(ans.trim(),pid,{
+        quote:quoteFor(n,toks), note:n.text, s:n.s, e:n.e,
+        para:toks[at]?toks[at].p:0
+      });
+      hit++;
+      touched[pid]=1;
+      (drop[pid]=drop[pid]||{})[n.id]=1;
     });
-    node().notes=keep;
+
+    Object.keys(drop).forEach(function(pid){
+      if(!nodes[pid]) return;
+      nodes[pid].notes=nodes[pid].notes.filter(function(n){ return !drop[pid][n.id]; });
+    });
+
     render(); refresh(); syncNav();
-    toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
+    var pages=Object.keys(touched).length;
+    toast(hit+" attached"+(pages>1?" across "+pages+" pages":"")+
+          (kept?", "+kept+" unanswered":""));
   }
 
   function editNote(n,el){
@@ -1294,9 +1386,12 @@
     return n.status==="resolved"?"Resolved" : n.status==="dropped"?"Dropped" : "Open";
   }
 
-  /* One line per thread in the whole graph — continuity without the bulk. */
-  function ledger(skipId){
+  /* One line per thread in the whole graph — continuity without the bulk.
+     `omit` holds note ids that are being asked in full further down, so the
+     ledger never repeats a question it is about to be handed properly. */
+  function ledger(skipId,omit){
     var lines=[];
+    omit=omit||{};
     Object.keys(nodes).forEach(function(id){
       var x=nodes[id];
       if(!x.parents.length || id===skipId) return;
@@ -1305,6 +1400,7 @@
     Object.keys(nodes).forEach(function(id){
       if(id===skipId) return;   // listed in full further down; no need to repeat
       nodes[id].notes.forEach(function(nt){
+        if(omit[nt.id]) return;
         lines.push("Open (no reply yet): "+trim(nt.text,90));
       });
     });
@@ -1349,7 +1445,9 @@
       }
     }
 
-    var led=ledger(n.id);
+    var asked={};
+    noteEntries().forEach(function(e){ asked[e.note.id]=1; });
+    var led=ledger(n.id,asked);
     if(led.length){
       out+="--- THREADS SO FAR ---\n"+led.join("\n")+
            "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
@@ -1357,16 +1455,66 @@
     return out+provenance(n);
   }
 
+  /* How a page came to exist, in one line, so a note deep in a branch arrives
+     with its lineage without printing every ancestor in full. */
+  function pageHeading(id,numOfPage){
+    var x=nodes[id];
+    if(!x||!x.parents.length) return "the original text";
+    var up=firstParent(x), at=numOfPage[up];
+    return "written in reply to my note \u201C"+trim(x.note,90)+"\u201D"+
+           (at?" on page "+at:"")+
+           (x.parents.length>1?", which answered a note across "+x.parents.length+" pages":"");
+  }
+
   function buildPrompt(){
-    var notes=pageNotes();
-    if(!notes.length) return "";
-    var out=mode.head+"\n\n"+contextBlock();
-    out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
-    notes.forEach(function(n,i){
-      out+="["+(i+1)+"] \u201C"+quoteFor(n)+"\u201D\n    \u2192 "+n.text+"\n\n";
+    var list=noteEntries();
+    if(!list.length) return "";
+
+    /* One page's worth of notes reads better as a single text with notes on it,
+       which is what this always was. */
+    var used=[], seen={};
+    list.forEach(function(e){ if(e.pid&&!seen[e.pid]){ seen[e.pid]=1; used.push(e.pid); } });
+    if(used.length<=1){
+      var out=mode.head+"\n\n"+contextBlock();
+      out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
+      list.forEach(function(e,i){
+        out+="["+(i+1)+"] \u201C"+quoteFor(e.note,toksFor(e.pid))+"\u201D\n    \u2192 "+e.note.text+"\n\n";
+      });
+      out+="--- END NOTES ---\n\n"+mode.tail+BLOCK;
+      return out;
+    }
+
+    /* Notes spread across the thread. Every page carrying one goes in whole, in
+       reading order, and the notes are numbered straight through them so a
+       single reply can answer all of them at once. */
+    var numOfPage={};
+    used.forEach(function(pid,i){ numOfPage[pid]=i+1; });
+
+    var out=mode.head+"\n\nMy notes are spread across several pages of a branching "+
+            "conversation. Each page is below, then every note in reading order, "+
+            "each one marked with the page it sits on and the words it is about.\n\n";
+
+    used.forEach(function(pid,i){
+      out+="--- PAGE "+(i+1)+" ("+pageHeading(pid,numOfPage)+") ---\n"+
+           nodes[pid].text.replace(/\r/g,"").trim()+"\n--- END PAGE "+(i+1)+" ---\n\n";
     });
-    out+="--- END NOTES ---\n\n";
-    out+=mode.tail+BLOCK;
+
+    var asked={};
+    list.forEach(function(e){ asked[e.note.id]=1; });
+    var led=ledger(null,asked);
+    if(led.length){
+      out+="--- THREADS SO FAR ---\n"+led.join("\n")+
+           "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
+    }
+
+    out+="--- MY NOTES ---\n";
+    list.forEach(function(e,i){
+      out+="["+(i+1)+"] on page "+numOfPage[e.pid]+", \u201C"+quoteFor(e.note,toksFor(e.pid))+"\u201D\n"+
+           "    \u2192 "+e.note.text+"\n\n";
+    });
+    out+="--- END NOTES ---\n\n"+mode.tail+
+         " Answer every note, wherever it sits \u2014 a note on one page may well "+
+         "bear on another, so say so when it does."+BLOCK;
     return out;
   }
 
@@ -1388,7 +1536,7 @@
     $("modebtn").innerHTML=mode.label+" \u25BE";
     drawMenu(); refreshCount();
   }
-  function refreshCount(){ countEl.textContent=activeNotes().length; }
+  function refreshCount(){ countEl.textContent=noteEntries().length; }
 
   /* ---------------- typing a note ---------------- */
   var typeTarget=null;
@@ -1428,19 +1576,34 @@
 
   function refresh(){
     refreshCount();
-    var list=activeNotes(), tree=inTree();
+    var list=noteEntries(), tree=inTree();
+    /* Which page each note is on only matters once more than one is involved. */
+    var pages={}, spread=0;
+    list.forEach(function(e){ if(e.pid&&!pages[e.pid]){ pages[e.pid]=1; spread++; } });
+
     sheetEl.classList.toggle("empty",list.length===0);
     listEl.innerHTML="";
-    list.forEach(function(n,i){
+    list.forEach(function(e,i){
+      var n=e.note;
       var d=document.createElement("div"); d.className="note";
       var num=document.createElement("div"); num.className="num"; num.textContent="["+(i+1)+"]";
       var body=document.createElement("div"); body.className="body";
+
+      if(!tree && spread>1){
+        var where=document.createElement("button");
+        where.className="onpage"+(e.pid===curId?" here":"");
+        where.textContent=(e.pid===curId?"on this page":"on \u201C"+pageLabel(e.pid)+"\u201D");
+        where.title="Open the page this note is on";
+        where.addEventListener("click",function(){ if(e.pid!==curId) focusNode(e.pid); });
+        body.appendChild(where);
+      }
+
       var q=document.createElement("div"); q.className="quote";
       q.textContent=tree
         ? n.ids.length+" page"+(n.ids.length>1?"s":"")+": "+n.ids.map(function(id){
             var x=nodes[id]; return x&&x.note?trim(x.note,26):"the original";
           }).join(" + ")
-        : "\u201C"+quoteFor(n)+"\u201D";
+        : "\u201C"+quoteFor(n,toksFor(e.pid))+"\u201D";
       var s=document.createElement("div"); s.className="said"; s.textContent=n.text;
       s.title="Tap to edit";
       s.addEventListener("click",function(){ editNote(n,s); });
@@ -1449,10 +1612,10 @@
       kill.setAttribute("aria-label","Delete note "+(i+1));
       kill.addEventListener("click",function(){
         if(tree){ treeNotes=treeNotes.filter(function(x){ return x.id!==n.id; }); drawTree(); return; }
-        /* Splice in place. Reassigning a filtered copy used to leave the page
-           still holding the original array, so the note came back the next time
-           the page was opened. */
-        var live=pageNotes();
+        /* Splice in place, on the note's own page. Reassigning a filtered copy
+           used to leave the page still holding the original array, so the note
+           came back the next time the page was opened. */
+        var live=pageNotes(e.pid);
         var at=live.indexOf(n);
         if(at>=0) live.splice(at,1);
         render(); refresh();
@@ -1466,7 +1629,7 @@
   }
 
   function positionCaption(){
-    capEl.style.bottom=(pageNotes().length?"110px":"40px");
+    capEl.style.bottom=(noteEntries().length?"110px":"40px");
   }
 
   /* ---------------- sheet ---------------- */
@@ -1585,13 +1748,34 @@
 
   function syncCtx(){
     var n=node(), deep=n&&n.parents.length;
-    $("ctxbar").hidden=inTree()||!deep;
+    var spread=0, seen={};
+    if(!inTree()) noteEntries().forEach(function(e){
+      if(e.pid&&!seen[e.pid]){ seen[e.pid]=1; spread++; }
+    });
+
+    var sb=$("scopebar");
+    sb.hidden=inTree()||Object.keys(nodes).length<2;
+    sb.textContent=noteScope==="thread"?"All pages":"This page";
+    sb.classList.toggle("narrow",noteScope==="page");
+    sb.title=noteScope==="thread"
+      ? "The notes below are every open note in the thread, and they go out as one prompt. Tap for this page only."
+      : "Only notes on the page you're reading. Tap to collect the whole thread again.";
+
+    /* Once several pages are going out in full, the context setting has nothing
+       left to decide. */
+    $("ctxbar").hidden=inTree()||!deep||spread>1;
     $("ctxbar").textContent="Context: "+ctxMode;
     $("ctxbar").title=
       ctxMode==="path"?"Sends the chain from the original down to this page":
       ctxMode==="page"?"Sends this page only":
                        "Sends every page in the thread";
   }
+  $("scopebar").addEventListener("click",function(e){
+    e.stopPropagation();
+    noteScope=noteScope==="thread"?"page":"thread";
+    saveScope();
+    render(); refresh();
+  });
   $("ctxbar").addEventListener("click",function(e){
     e.stopPropagation();
     ctxMode=CTX[(CTX.indexOf(ctxMode)+1)%CTX.length];
@@ -1737,6 +1921,23 @@
     var store=storage();
     if(!store) return;
     try{ store.removeItem(SAVE_KEY); }catch(e){}
+  }
+
+  /* The scope is a working preference, not part of the thread, so it outlives
+     "New text" and travels with the browser rather than the export. */
+  var SCOPE_KEY="meristem.scope.v1";
+  function saveScope(){
+    var store=storage();
+    if(!store) return;
+    try{ store.setItem(SCOPE_KEY,noteScope); }catch(e){}
+  }
+  function loadScope(){
+    var store=storage();
+    if(!store) return;
+    try{
+      var v=store.getItem(SCOPE_KEY);
+      if(v==="page"||v==="thread") noteScope=v;
+    }catch(e){}
   }
   function restore(){
     var store=storage();
@@ -1980,7 +2181,6 @@
   var readMode=false, collapsed={};
   var picked=[], treeNotes=[], treeTarget=null, treeReplyMode=false, selectMode=false;
   function inTree(){ return !$("treeview").hidden; }
-  function activeNotes(){ return inTree()?treeNotes:pageNotes(); }
   var LAYER=300, SPREAD=230;
   var expanded={};   // pages the reader has opened out in place
   /* full-text cards are far bigger, so the whole scene has to open up */
@@ -2730,6 +2930,7 @@
     toEditor();
   });
 
+  loadScope();
   syncMode();
   if(!restore()) toEditor();
 })();
