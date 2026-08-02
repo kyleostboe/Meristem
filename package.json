@@ -1,0 +1,14 @@
+{
+  "name": "meristem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Talk in the text — annotate prose in place and branch the conversation from your notes.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/regression.mjs",
+    "start": "npx --yes serve -l 8080 ."
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

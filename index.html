@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- No maximum-scale or user-scalable=no: this is a reading app, and pinch-zoom
+     is exactly the thing a reader reaches for. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Annotate prose in place — hold a word to speak a note right there — and branch the conversation out of your notes.">
+<meta name="theme-color" content="#E9ECF2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12171F" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#127793;</text></svg>">
 <title>Meristem — talk in the text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,13 +22,46 @@
     --rule:#D9DEE8;
     --mark:#CF2E4B;
     --hi:#FFE066;
+    --hi-ink:#141B2D;
     --sheet:#0F1524;
+    --on-sheet:#F4F6FB;
+    --on-sheet-dim:#9AA6C0;
+    --on-sheet-faint:#59637E;
+    --on-mark:#FFFFFF;
+    --ghost:#9AA3B6;   /* placeholder text */
+    --hover:#F1F3F7;   /* menu row hover */
+    --pickbg:#FFF6DA;  /* a selected page in the map */
+    --wire:#7A879F;
     --r-s:5px;
     --r-m:9px;
     --r-l:11px;
     --pill:7px;
     --lift:0 10px 30px rgba(20,27,45,.10);
     --lift-lg:0 18px 46px rgba(20,27,45,.16);
+  }
+  /* The palette is the only thing that changes; every rule below reads from it. */
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#12171F;
+      --card:#1B222D;
+      --ink:#E7ECF4;
+      --muted:#93A0B8;
+      --rule:#2C3542;
+      --mark:#FF6B84;
+      --hi:#7A6320;
+      --hi-ink:#FFF3C4;
+      --sheet:#070A11;
+      --on-sheet:#F4F6FB;
+      --on-sheet-dim:#93A0B8;
+      --on-sheet-faint:#5A6478;
+      --on-mark:#1B222D;
+      --ghost:#5E6B82;
+      --hover:#242C39;
+      --pickbg:#3A3116;
+      --wire:#5C6980;
+      --lift:0 10px 30px rgba(0,0,0,.34);
+      --lift-lg:0 18px 46px rgba(0,0,0,.46);
+    }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
@@ -84,7 +123,7 @@
   .reader.editing{user-select:text;-webkit-user-select:text;outline:none;min-height:200px}
   .reader.editing p{border-left-color:var(--ink)}
   .reader.editing[data-empty="1"] p:first-child::before{
-    content:attr(data-ph);color:#9AA3B6;pointer-events:none;
+    content:attr(data-ph);color:var(--ghost);pointer-events:none;
     font:inherit;font-size:inherit;line-height:inherit;letter-spacing:inherit;
   }
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -94,25 +133,50 @@
   .reader{
     font-size:19px;line-height:2.05;letter-spacing:.002em;
     padding:0 0 200px;
+    /* Touch needs this off: a long press is the annotate gesture, and without
+       it the browser's own selection callout fires instead. A mouse has no such
+       conflict, so there the text stays selectable and copyable. */
     user-select:none;-webkit-user-select:none;
+  }
+  @media (hover:hover) and (pointer:fine){
+    .reader{user-select:text;-webkit-user-select:text}
+    body.gesturing .reader{user-select:none;-webkit-user-select:none}
+  }
+  .w:focus-visible{
+    outline:2px solid var(--mark);outline-offset:2px;border-radius:var(--r-s);
+  }
+  .kbhint{
+    font-family:"Newsreader",Georgia,serif;font-size:12px;line-height:1.6;
+    color:var(--muted);margin:0 0 14px;
   }
   #setup{display:flex;flex-direction:column;gap:16px}
   .reader p{margin:0 0 2.05em;padding-left:16px;border-left:3px solid var(--rule)}
   .w{border-radius:var(--r-s);padding:1px 0}
-  .w.live{background:var(--hi);box-shadow:0 0 0 3px var(--hi);border-radius:var(--r-s)}
+  .w.live{background:var(--hi);color:var(--hi-ink);box-shadow:0 0 0 3px var(--hi);border-radius:var(--r-s)}
   .w.annot{
     text-decoration:underline;
     text-decoration-color:var(--mark);
     text-underline-offset:5px;
     text-decoration-thickness:2px;
   }
+  /* An open note and an answered one are different states, so they get
+     different shapes rather than two shades of the same red — a bare numeral
+     for a note still waiting, a filled disc once a reply is attached. */
   sup.mk{
     font-family:"Newsreader",Georgia,serif;font-size:10px;font-weight:500;
     color:var(--mark);vertical-align:super;line-height:0;padding-left:2px;
   }
+  sup.mk.ans{
+    display:inline-block;min-width:12px;height:12px;line-height:12px;
+    text-align:center;border-radius:6px;
+    background:var(--mark);color:var(--on-mark);
+    font-size:8.5px;font-weight:700;padding:0 2px;margin-left:2px;
+    /* Sits on the x-height rather than the cap line, so it clears the line above. */
+    vertical-align:.32em;
+  }
   .w.done{
     text-decoration:underline;
-    text-decoration-color:#9AA6C0;
+    text-decoration-color:var(--muted);
     text-decoration-style:dotted;
     text-underline-offset:5px;
   }
@@ -132,7 +196,6 @@
     font-family:"Newsreader",Georgia,serif;font-size:13px;color:var(--muted);
     margin:2.6em 0 .3em;padding-top:1.4em;border-top:1px solid var(--rule);
   }
-  .mk.ans{color:var(--mark);font-weight:700}
   .rnum{
     display:inline-block;min-width:15px;color:var(--mark);font-weight:700;
   }
@@ -189,10 +252,10 @@
   }
   .tcount{flex:1;min-width:0;color:var(--muted)}
   #tselect.armed{color:var(--mark)}
-  .tnode.pick{border-left-color:var(--mark);background:#FFF6DA}
+  .tnode.pick{border-left-color:var(--mark);background:var(--pickbg)}
   .tnode .tnum{
     position:absolute;top:-9px;right:-9px;min-width:20px;height:20px;line-height:20px;
-    text-align:center;border-radius:50%;background:var(--mark);color:#fff;
+    text-align:center;border-radius:50%;background:var(--mark);color:var(--on-mark);
     font-size:11px;font-weight:700;
   }
   #treeopen{color:var(--mark)}
@@ -252,6 +315,8 @@
     mask-composite:intersect;
   }
   .treebody:active{cursor:grabbing}
+  /* SCENE_ORIGIN_X / SCENE_ORIGIN_Y in the script mirror these two values —
+     "Fit all" measures from this origin, so change both together. */
   .scene{
     position:absolute;left:50%;top:45%;width:0;height:0;
     transform-style:preserve-3d;
@@ -292,23 +357,23 @@
     position:absolute;inset:0;width:100%;height:100%;
     pointer-events:none;overflow:visible;
   }
-  .wires line{stroke:#7A879F;stroke-width:2.2;stroke-linecap:round}
+  .wires line{stroke:var(--wire);stroke-width:2.2;stroke-linecap:round}
   .wires line.hot{stroke:var(--mark);stroke-width:3.2}
 
   /* floating live caption */
   .caption{
     position:fixed;z-index:60;left:12px;right:12px;
     max-width:616px;margin:0 auto;
-    background:var(--sheet);color:#fff;border-radius:var(--r-m);
+    background:var(--sheet);color:var(--on-sheet);border-radius:var(--r-m);
     padding:14px 16px;font-family:"Newsreader",Georgia,serif;font-size:13px;line-height:1.55;
     display:none;box-shadow:0 16px 44px rgba(15,21,36,.38);
   }
   .caption.on{display:block}
-  .caption .rec{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9AA6C0;margin-bottom:7px}
+  .caption .rec{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-sheet-dim);margin-bottom:7px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--mark);animation:pulse 1s infinite}
   @keyframes pulse{50%{opacity:.25}}
-  .caption .txt{min-height:1.5em;color:#F4F6FB}
-  .caption .txt:empty::after{content:"listening…";color:#59637E}
+  .caption .txt{min-height:1.5em;color:var(--on-sheet)}
+  .caption .txt:empty::after{content:"listening…";color:var(--on-sheet-faint)}
 
 
   /* ---------- bottom sheet ---------- */
@@ -358,10 +423,10 @@
   .mitem:last-child{border-bottom:0}
   .mitem .n{font-size:15px;font-weight:700;letter-spacing:.002em;color:var(--ink);display:block;margin-bottom:2px}
   .mitem .d{font-size:11.5px;line-height:1.5;color:var(--muted);display:block}
-  .mitem:hover{background:#F1F3F7}
+  .mitem:hover{background:var(--hover)}
   .mitem.on{background:var(--ink)}
-  .mitem.on .n{color:#fff}
-  .mitem.on .d{color:#A8B2C6}
+  .mitem.on .n{color:var(--paper)}
+  .mitem.on .d{color:var(--muted)}
 
 
 
@@ -380,7 +445,7 @@
 
   .toast{
     position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:80;
-    background:var(--ink);color:#fff;padding:11px 20px;border-radius:var(--pill);
+    background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:var(--pill);
     box-shadow:var(--lift-lg);
     font-family:"Newsreader",Georgia,serif;font-size:14px;letter-spacing:.002em;
     opacity:0;transition:opacity .2s;pointer-events:none;
@@ -400,6 +465,29 @@
   .typein .card{background:var(--card);width:100%;max-width:640px;margin:0 auto;padding:22px 20px 20px;border-radius:var(--r-l) var(--r-l) 0 0;box-shadow:var(--lift-lg)}
   .typein .q{font-size:15px;font-style:italic;color:var(--muted);margin:0 0 10px}
   .typein textarea{width:100%;min-height:88px;border:1px solid var(--rule);transition:border-color .15s,box-shadow .15s;border-radius:var(--r-s);padding:13px;font-family:"Newsreader",Georgia,serif;font-size:14px;line-height:1.5;resize:none;background:var(--paper);color:var(--ink)}
+
+  /* Once a text is open the standing instructions have done their job; the
+     screen is better spent on the text. They come back in the editor. */
+  body.reading .head{display:none}
+
+  /* A word joined to the next one in the same run carries the space between
+     them, so the underline runs unbroken across a phrase instead of breaking
+     at every gap. */
+  .w.cont{margin-right:-0.26em;padding-right:0.26em}
+
+  /* Below ~430px the five top-bar controls no longer fit, and the last of them
+     used to be pushed off-screen with no way to reach it. */
+  @media (max-width:430px){
+    .topbar{gap:6px;padding:0 12px}
+    .acts{gap:7px}
+    .tbtn,.btn,.mini,.topbar .reset{font-size:13px;padding:10px 3px}
+    body.reading .wordmark{display:none}
+    .treehead,.treebar{gap:10px;padding-left:14px;padding-right:14px}
+    .treehead{font-size:13px}
+  }
+  @media (max-width:340px){
+    .wordmark{display:none}
+  }
 
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
@@ -426,7 +514,7 @@
     <p>Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.</p>
   </div>
 
-  <div class="scroller" id="scroller">
+  <main class="scroller" id="scroller">
   <section class="paste" id="paste">
     <div class="reader" id="reader" data-ph="Paste here…"></div>
     <div id="setup">
@@ -439,7 +527,7 @@
       <p class="micnote" id="micnote" hidden></p>
     </div>
   </section>
-  </div>
+  </main>
 </div>
 
 
@@ -448,7 +536,7 @@
   <div class="txt" id="captxt"></div>
 </div>
 
-<div class="treeview" id="treeview" hidden>
+<div class="treeview" id="treeview" role="dialog" aria-modal="true" aria-label="Thread map" hidden>
   <div class="treehead">
     <span class="tsel" id="tsel"></span>
     <button class="reset" id="rootbtn">Root</button>
@@ -469,13 +557,13 @@
   </div>
 </div>
 
-<div class="modemenu" id="modemenu" hidden></div>
+<div class="modemenu" id="modemenu" role="menu" aria-label="Response mode" hidden></div>
 
 <!-- SHEET -->
 <div class="sheet empty" id="sheet">
   <div class="grab" id="grab" role="button" tabindex="0">
     <span class="count" id="count">0</span>
-    <button class="mini" id="modebtn">Respond &#9662;</button>
+    <button class="mini" id="modebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="modemenu">Respond &#9662;</button>
     <span class="chev" id="chev">&#9650;</span>
     <div class="baracts">
       <button class="mini" id="ctxbar">Context: path</button>
@@ -490,9 +578,9 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<div class="typein" id="importin">
+<div class="typein" id="importin" role="dialog" aria-modal="true" aria-labelledby="importq">
   <div class="card">
     <p class="q" id="importq">Drop a thread file here, or paste it below. This replaces whatever is open.</p>
     <textarea id="importtxt" placeholder="Paste the thread data here…"></textarea>
@@ -505,9 +593,9 @@
   </div>
 </div>
 
-<div class="typein" id="replyin">
+<div class="typein" id="replyin" role="dialog" aria-modal="true" aria-labelledby="replyq">
   <div class="card">
-    <p class="q">Paste the whole reply. Only the notes block gets read.</p>
+    <p class="q" id="replyq">Paste the whole reply. Only the notes block gets read.</p>
     <textarea id="replytxt" placeholder="Paste the AI's response here…"></textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn" id="replysave">Attach replies</button>
@@ -516,7 +604,7 @@
   </div>
 </div>
 
-<div class="typein" id="typein">
+<div class="typein" id="typein" role="dialog" aria-modal="true" aria-labelledby="typeq">
   <div class="card">
     <p class="q" id="typeq"></p>
     <textarea id="typetxt" placeholder="Type, or tap the mic key on your keyboard and talk… Enter saves, Shift+Enter for a new line."></textarea>
@@ -545,10 +633,19 @@
   var nodes={}, curId=null, seq=0;
   var words=[];      // tokens of the focused page
   var TOK=[];        // alias kept for the annotation code
-  var notes=[];      // focused page's notes — always nodes[curId].notes
   var nextId=1;
 
   function node(){ return nodes[curId]; }
+
+  /* Notes live on their page and are only ever read through here. An earlier
+     version cached nodes[curId].notes in a module variable, which let the two
+     drift apart: deleting a note replaced the cached array without writing it
+     back, and the async speech path appended to whichever page happened to be
+     open when the microphone finally closed. Never cache this. */
+  function pageNotes(id){
+    var n=nodes[id==null?curId:id];
+    return n?n.notes:[];
+  }
 
   function makeNode(text,parentIds,meta){
     var ps=parentIds==null?[]:(Array.isArray(parentIds)?parentIds.slice():[parentIds]);
@@ -573,7 +670,6 @@
         para.trim().split(/\s+/).forEach(function(w){ words.push({t:w,p:pi,c:"src"}); });
       });
     TOK=words.slice();
-    notes=n?n.notes:[];
   }
 
   function depth(id,memo){
@@ -589,8 +685,10 @@
   function focusNode(id){
     curId=id;
     tokenize();
+    kbA=kbB=-1;
     readerEl.classList.remove("editing");
     readerEl.removeAttribute("contenteditable");
+    document.body.classList.add("reading");
     $("setup").hidden=true;
     $("reset").hidden=false; $("edit").hidden=false; $("go").hidden=true;
     $("exportbtn").hidden=false;
@@ -751,7 +849,7 @@
 
   function render(){
     var marksAt={}, annotated={}, done={}, kidsByPara={};
-    notes.forEach(function(n,i){
+    pageNotes().forEach(function(n,i){
       (marksAt[n.e]=marksAt[n.e]||[]).push(i+1);
       for(var k=n.s;k<=n.e;k++) annotated[k]=true;
     });
@@ -826,17 +924,29 @@
               "</div>"+
             "</div>";
     }
+    /* Exactly one word carries tabindex 0 so the reader is a single tab stop,
+       and the arrow keys move within it from there. */
+    if(kbA<0||kbA>=words.length) kbA=kbB=words.length?0:-1;
     var cp=-1;
     words.forEach(function(w,i){
       if(w.p!==cp){
         if(cp!==-1) html+="</p>";
         html+="<p>"; cp=w.p;
       }
-      var cls="w"+(annotated[i]?" annot":"")+(done[i]&&!annotated[i]?" done":"");
-      html+='<span class="'+cls+'" data-i="'+i+'">'+esc(w.t)+"</span>";
+      /* Carry the following space inside the span while the run continues, so
+         a phrase gets one unbroken underline rather than one per word. A mark
+         sits between the words, which ends the run. */
+      var marked=marksAt[i]||replyMark[i];
+      var cont=!marked && i+1<words.length && words[i+1].p===w.p &&
+               ((annotated[i]&&annotated[i+1]) ||
+                (done[i]&&done[i+1]&&!annotated[i]&&!annotated[i+1]));
+      var cls="w"+(annotated[i]?" annot":"")+(done[i]&&!annotated[i]?" done":"")+
+              (cont?" cont":"");
+      html+='<span class="'+cls+'" data-i="'+i+'" tabindex="'+(i===kbA?"0":"-1")+'">'+
+            esc(w.t)+(cont?" ":"")+"</span>";
       if(marksAt[i]) html+='<sup class="mk">'+marksAt[i].join(",")+"</sup>";
       if(replyMark[i]) html+='<sup class="mk ans">'+replyMark[i].join(",")+"</sup>";
-      html+=" ";
+      if(!cont) html+=" ";
     });
     if(cp!==-1) html+="</p>";
 
@@ -858,6 +968,7 @@
   var promptDirty=false;
   var CTX=["path","page","all"], ctxMode="path";
   var timer=null, engaged=false, startPt=null, anchorA=-1, anchorB=-1, tapIdx=-1;
+  var kbA=-1, kbB=-1;   // keyboard cursor / selection over the same words
 
   function wordAt(x,y){
     var el=document.elementFromPoint(x,y);
@@ -881,6 +992,60 @@
   readerEl.addEventListener("input",function(){
     if(readerEl.classList.contains("editing"))
       readerEl.dataset.empty=readSurface().trim()?"0":"1";
+  });
+
+  /* ---------------- keyboard annotation ----------------
+     Holding and dragging is the whole interaction, which left the app unusable
+     without a pointer. The same two moves — pick a word, widen to a phrase —
+     are here on the arrow keys, with one tab stop into the text. */
+  function wordEl(i){ return readerEl.querySelector('.w[data-i="'+i+'"]'); }
+
+  function kbGo(i,extend){
+    if(!words.length) return;
+    i=Math.max(0,Math.min(i,words.length-1));
+    kbB=i;
+    if(!extend) kbA=i;
+    var all=readerEl.querySelectorAll(".w");
+    var lo=Math.min(kbA,kbB), hi=Math.max(kbA,kbB);
+    for(var k=0;k<all.length;k++){
+      var idx=parseInt(all[k].dataset.i,10);
+      all[k].classList.toggle("live", extend && idx>=lo && idx<=hi);
+      all[k].setAttribute("tabindex", idx===kbA?"0":"-1");
+    }
+    var el=wordEl(i);
+    if(el){ el.setAttribute("tabindex","0"); el.focus({preventScroll:false}); }
+  }
+
+  readerEl.addEventListener("focusin",function(e){
+    var t=e.target;
+    if(!t.classList||!t.classList.contains("w")) return;
+    var i=parseInt(t.dataset.i,10);
+    if(!isNaN(i) && i!==kbA && i!==kbB){ kbA=kbB=i; }
+  });
+
+  readerEl.addEventListener("keydown",function(e){
+    if(readerEl.classList.contains("editing")) return;
+    var t=e.target;
+    if(!t.classList||!t.classList.contains("w")) return;
+    var i=parseInt(t.dataset.i,10);
+    if(isNaN(i)) return;
+
+    if(e.key==="ArrowRight"||e.key==="ArrowDown"){
+      e.preventDefault(); kbGo(kbB+1,e.shiftKey); return;
+    }
+    if(e.key==="ArrowLeft"||e.key==="ArrowUp"){
+      e.preventDefault(); kbGo(kbB-1,e.shiftKey); return;
+    }
+    if(e.key==="Home"){ e.preventDefault(); kbGo(0,e.shiftKey); return; }
+    if(e.key==="End"){ e.preventDefault(); kbGo(words.length-1,e.shiftKey); return; }
+    if(e.key==="Enter"||e.key===" "){
+      e.preventDefault();
+      var lo=Math.min(kbA,kbB), hi=Math.max(kbA,kbB);
+      paintRange(lo,hi);
+      askType({s:lo,e:hi});
+      return;
+    }
+    if(e.key==="Escape"){ kbA=kbB=i; clearLive(); }
   });
 
   readerEl.addEventListener("click",function(e){
@@ -913,6 +1078,7 @@
     clearTimeout(timer);
     timer=setTimeout(function(){
       engaged=true; anchorA=anchorB=idx;
+      document.body.classList.add("gesturing");
       try{ readerEl.setPointerCapture(e.pointerId); }catch(err){}
       paintLive();
       capEl.classList.add("on");
@@ -940,6 +1106,7 @@
 
   function release(){
     clearTimeout(timer);
+    document.body.classList.remove("gesturing");
     if(!engaged){
       if(startPt&&tapIdx>=0){ paintRange(tapIdx,tapIdx); askType({s:tapIdx,e:tapIdx}); }
       startPt=null; tapIdx=-1;
@@ -948,7 +1115,12 @@
     startPt=null; tapIdx=-1;
     engaged=false;
     var a=Math.min(anchorA,anchorB), b=Math.max(anchorA,anchorB);
-    pending={s:a,e:b};
+    /* Stamp the page the words belong to. The microphone closes asynchronously
+       \u2014 on a phone that is a network round trip \u2014 so by the time the transcript
+       lands the reader may well be showing a different page. Without this the
+       note is filed against whatever is open then, carrying this page's token
+       indices, and lands somewhere it can never be read from. */
+    pending={id:curId,s:a,e:b};
     capEl.classList.remove("on");
     stopListening();
   }
@@ -960,67 +1132,110 @@
     var p=pending; pending=null;
     if(!p) return;
     var said=heard.trim();
-    if(!said){ askType(p); return; }
-    addNote(p.s,p.e,said);
+    if(!said){
+      /* Nothing was heard. Only offer the typing box if the reader is still on
+         the page the gesture started on; otherwise the anchor is meaningless. */
+      if(p.id===curId) askType(p);
+      else toast("Didn't catch that");
+      return;
+    }
+    addNote(p.s,p.e,said,p.id);
   }
 
-  function addNote(s,e,text){
-    notes.push({id:nextId++,s:s,e:e,text:text});
-    notes.sort(function(x,y){ return x.s-y.s || x.e-y.e; });
-    node().notes=notes;
+  function addNote(s,e,text,pageId){
+    var id=pageId==null?curId:pageId;
+    var target=nodes[id];
+    if(!target) return;
+    var list=target.notes;
+    list.push({id:nextId++,s:s,e:e,text:text});
+    list.sort(function(x,y){ return x.s-y.s || x.e-y.e; });
+    if(id!==curId){
+      /* Filed on the page it was spoken on, which is no longer the page in
+         front of the reader \u2014 say so rather than letting it vanish. */
+      toast("Note saved on the previous page");
+      saveSoon();
+      return;
+    }
     render(); refresh();
   }
 
-  function span(a,b){
-    var out=[]; for(var i=a;i<=b;i++) out.push(TOK[i].t);
+  /* Anchors can outlive the text they point at: an imported thread may carry
+     indices from a different revision, and a note can be filed against a page
+     other than the one on screen. Clamp rather than throw \u2014 one stale anchor
+     must never take down the whole note list. */
+  function span(a,b,toks){
+    var T=toks||TOK;
+    if(!T.length) return "";
+    var lo=Math.max(0,Math.min(a|0,T.length-1));
+    var hi=Math.max(lo,Math.min(b|0,T.length-1));
+    var out=[]; for(var i=lo;i<=hi;i++){ if(T[i]) out.push(T[i].t); }
     return out.join(" ");
   }
-  function quoteFor(n){
-    var core=span(n.s,n.e);
-    if(n.e-n.s>=2) return core;
-    var back=n.s;
-    while(back>0 && n.s-back<6) back--;
-    var lead=back<n.s?span(back,n.s-1):"";
+  function quoteFor(n,toks){
+    var T=toks||TOK;
+    if(!T.length) return "";
+    var s=Math.max(0,Math.min(n.s|0,T.length-1));
+    var e=Math.max(s,Math.min(n.e|0,T.length-1));
+    var core=span(s,e,T);
+    if(e-s>=2) return core;
+    var back=s;
+    while(back>0 && s-back<6) back--;
+    var lead=back<s?span(back,s-1,T):"";
     return (back>0?"\u2026":"")+(lead?lead+" ":"")+core;
   }
 
+  /* Send what was actually pasted. Rebuilding prose from the token array
+     re-joined every run of whitespace to a single space, so indentation, line
+     breaks inside a paragraph, lists and code blocks all reached the model
+     flattened. Tokens are for anchoring; they are not the text. */
   function sourceText(){
-    var out=[], cur=-1, line=[];
-    words.forEach(function(w){
-      if(w.p!==cur){ if(line.length) out.push(line.join(" ")); line=[]; cur=w.p; }
-      line.push(w.t);
-    });
-    if(line.length) out.push(line.join(" "));
-    return out.join("\n\n");
+    var n=node();
+    return n?n.text.replace(/\r/g,"").trim():"";
   }
 
+  /* Models drift off the requested format constantly, so accept the separators
+     they actually reach for \u2014 "1." and "1)" as well as arrows and dashes.
+     Reports whether the [[notes]] fence was present: without it we are reading
+     the whole message and any incidental numbered list looks like an answer,
+     so the caller confirms before acting. */
   function parseReply(raw){
     var m=raw.match(/\[\[notes\]\]([\s\S]*?)(?:\[\[\/notes\]\]|$)/i);
-    var body=m?m[1]:raw;
+    var fenced=!!m;
+    var body=fenced?m[1]:raw;
     var map={}, cur=null;
     body.split(/\n/).forEach(function(L){
-      var hit=L.match(/^\s*\[?(\d{1,3})\]?\s*(?:\u2192|->|=>|:|\u2014|-)\s*(.+)$/);
+      var hit=L.match(/^\s*\[?(\d{1,3})\]?\s*(?:\u2192|->|=>|:|\u2014|[-.)])\s*(.+)$/);
       if(hit){ cur=hit[1]; map[cur]=(map[cur]?map[cur]+"\n":"")+hit[2].trim(); }
-      else if(cur && L.trim()) map[cur]+="\n"+L.trim();
+      /* Only glue trailing lines onto the previous answer inside a fence. In an
+         unfenced message those lines are ordinary prose, not continuations. */
+      else if(fenced && cur && L.trim()) map[cur]+="\n"+L.trim();
     });
-    return map;
+    return {answers:map, fenced:fenced};
   }
 
   function attachReplies(raw){
-    var map=parseReply(raw);
-    var keep=[], hit=0, first=null;
+    var parsed=parseReply(raw), map=parsed.answers;
+    var notes=pageNotes();
+    var found=notes.filter(function(n,i){ return map[String(i+1)]; }).length;
+    if(!found){ toast("No numbered answers found"); return; }
+    if(!parsed.fenced &&
+       !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
+
+    var keep=[], hit=0;
+    var limit=Math.max(0,TOK.length-1);
     notes.forEach(function(n,i){
       var ans=map[String(i+1)];
       if(ans){
         hit++;
-        var id=makeNode(ans.trim(),curId,{
-          quote:quoteFor(n), note:n.text, s:n.s, e:n.e, para:TOK[n.e].p
+        var at=Math.max(0,Math.min(n.e|0,limit));
+        makeNode(ans.trim(),curId,{
+          quote:quoteFor(n), note:n.text, s:n.s, e:n.e,
+          para:TOK[at]?TOK[at].p:0
         });
-        if(!first) first=id;
       } else keep.push(n);
     });
-    if(!hit){ toast("No numbered answers found"); return; }
-    node().notes=keep; notes=keep;
+    node().notes=keep;
     render(); refresh(); syncNav();
     toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
   }
@@ -1143,6 +1358,7 @@
   }
 
   function buildPrompt(){
+    var notes=pageNotes();
     if(!notes.length) return "";
     var out=mode.head+"\n\n"+contextBlock();
     out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
@@ -1156,7 +1372,7 @@
 
   function setMode(m){
     mode=m; syncMode(); prevEl.value=buildPrompt(); promptDirty=false;
-    $("modemenu").hidden=true;
+    showMenu(false);
   }
   function drawMenu(){
     var box=$("modemenu"); box.innerHTML="";
@@ -1177,32 +1393,38 @@
   /* ---------------- typing a note ---------------- */
   var typeTarget=null;
   function askType(p){
-    typeTarget=p;
+    typeTarget={id:p.id==null?curId:p.id, s:p.s, e:p.e};
     typeQ.textContent="\u201C"+span(p.s,p.e)+"\u201D";
     typeTxt.value="";
-    typeEl.classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ typeTxt.focus(); },30);
+    openOverlay(typeEl,typeTxt);
+  }
+  /* Both targets have to be cleared together. Leaving treeTarget set after a
+     discarded cross-page note meant the next ordinary note was filed against
+     the map selection instead of the page — invisible until you reopened the
+     map, and it healed itself after one note, so it read as random. */
+  function closeType(){
+    typeTarget=null; treeTarget=null;
+    clearLive();
+    closeOverlay(typeEl);
   }
   $("typesave").addEventListener("click",function(){
     var v=typeTxt.value.trim();
-    typeEl.classList.remove("on");
-    if(v&&treeTarget){ addTreeNote(v); }
-    else if(v&&typeTarget){ addNote(typeTarget.s,typeTarget.e,v); }
-    else { clearLive(); treeTarget=null; }
-    typeTarget=null;
+    var tt=typeTarget, tr=treeTarget;
+    typeTarget=null; treeTarget=null;
+    closeOverlay(typeEl);
+    if(v&&tr){ treeTarget=tr; addTreeNote(v); treeTarget=null; }
+    else if(v&&tt){ addNote(tt.s,tt.e,v,tt.id); }
+    else clearLive();
   });
   typeTxt.addEventListener("keydown",function(e){
     if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("typesave").click(); }
-    if(e.key==="Escape"){ typeEl.classList.remove("on"); typeTarget=null; clearLive(); }
+    if(e.key==="Escape"){ closeType(); }
   });
   typeEl.addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
     if(e.target===typeEl) $("typesave").click();
   });
-  $("typecancel").addEventListener("click",function(){
-    typeEl.classList.remove("on"); typeTarget=null; clearLive();
-  });
+  $("typecancel").addEventListener("click",closeType);
 
   function refresh(){
     refreshCount();
@@ -1227,7 +1449,12 @@
       kill.setAttribute("aria-label","Delete note "+(i+1));
       kill.addEventListener("click",function(){
         if(tree){ treeNotes=treeNotes.filter(function(x){ return x.id!==n.id; }); drawTree(); return; }
-        notes=notes.filter(function(x){ return x.id!==n.id; });
+        /* Splice in place. Reassigning a filtered copy used to leave the page
+           still holding the original array, so the note came back the next time
+           the page was opened. */
+        var live=pageNotes();
+        var at=live.indexOf(n);
+        if(at>=0) live.splice(at,1);
         render(); refresh();
       });
       d.appendChild(num); d.appendChild(body); d.appendChild(kill);
@@ -1235,11 +1462,11 @@
     });
     prevEl.value=inTree()?treePrompt():buildPrompt(); promptDirty=false;
     syncCtx();
+    saveSoon();
   }
 
   function positionCaption(){
-    var r=readerEl.getBoundingClientRect();
-    capEl.style.bottom=(notes.length?"110px":"40px");
+    capEl.style.bottom=(pageNotes().length?"110px":"40px");
   }
 
   /* ---------------- sheet ---------------- */
@@ -1260,6 +1487,49 @@
     setTimeout(function(){ toastEl.classList.remove("on"); },1600);
   }
 
+  /* ---------------- overlays ----------------
+     All three cards are modal, so they need the same three things: keep the
+     keyboard inside while open, close on Escape, and hand focus back to
+     whatever opened them. Only the typing card had any of it. */
+  var lastFocus=null;
+
+  function openOverlay(el,focusEl){
+    lastFocus=document.activeElement;
+    el.classList.add("on");
+    overlayAt=Date.now();
+    setTimeout(function(){ if(focusEl) focusEl.focus(); },30);
+  }
+  function closeOverlay(el){
+    el.classList.remove("on");
+    var back=lastFocus; lastFocus=null;
+    if(back&&back.focus&&document.contains(back)) back.focus({preventScroll:true});
+  }
+  function openOverlays(){
+    return ["typein","importin","replyin"].map($).filter(function(el){
+      return el.classList.contains("on");
+    });
+  }
+
+  /* Tab must not walk out of a modal card and into the page behind it. */
+  document.addEventListener("keydown",function(e){
+    var open=openOverlays();
+    if(!open.length) return;
+    var el=open[open.length-1];
+    if(e.key==="Escape"){
+      e.preventDefault();
+      if(el.id==="typein") closeType(); else closeOverlay(el);
+      return;
+    }
+    if(e.key!=="Tab") return;
+    var f=el.querySelectorAll("button, textarea, input:not([type=hidden]), [href], [tabindex]:not([tabindex='-1'])");
+    var can=[];
+    for(var i=0;i<f.length;i++) if(f[i].offsetParent!==null||f[i]===document.activeElement) can.push(f[i]);
+    if(!can.length) return;
+    var first=can[0], last=can[can.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  });
+
   function legacyCopy(txt){
     var ta=document.createElement("textarea");
     ta.value=txt;
@@ -1274,33 +1544,44 @@
     return ok;
   }
 
+  /* Modern API first. execCommand is deprecated, steals focus and scrolls the
+     page, so it is only worth reaching for when the real one is unavailable \u2014
+     which on a page served over http:// it still is. */
+  function copyText(txt,okMsg,onManual){
+    function fallback(){
+      if(legacyCopy(txt)){ toast(okMsg); return; }
+      if(onManual) onManual(); else toast("Couldn't copy");
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ toast(okMsg); },fallback);
+    } else fallback();
+  }
+
   function doCopy(){
     var txt=promptDirty?prevEl.value:(inTree()?treePrompt():buildPrompt());
     if(!txt){ toast("No notes yet"); return; }
-    if(legacyCopy(txt)){ toast("Copied"); return; }
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(txt).then(function(){ toast("Copied"); },manual);
-    } else manual();
-    function manual(){
+    copyText(txt,"Copied",function(){
       sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
       prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
       toast("Select all and copy");
-    }
+    });
   }
 
   function openReply(){
     treeReplyMode=inTree();
-    $("replytxt").value=""; $("replyin").classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ $("replytxt").focus(); },30);
+    $("replytxt").value="";
+    openOverlay($("replyin"),$("replytxt"));
   }
 
+  function showMenu(on){
+    $("modemenu").hidden=!on;
+    $("modebtn").setAttribute("aria-expanded",on?"true":"false");
+  }
   $("modebtn").addEventListener("click",function(e){
     e.stopPropagation();
-    var mm=$("modemenu");
-    mm.hidden=!mm.hidden;
+    showMenu($("modemenu").hidden);
   });
-  document.addEventListener("click",function(){ $("modemenu").hidden=true; });
+  document.addEventListener("click",function(){ showMenu(false); });
 
   function syncCtx(){
     var n=node(), deep=n&&n.parents.length;
@@ -1337,23 +1618,27 @@
 
   /* ---------------- sample tree, for testing navigation ---------------- */
   /* ---------------- thread import / export ---------------- */
-  function exportTree(){
-    return JSON.stringify({
-      meristem:1, caret:1, root:rootId(), cur:curId, seq:seq, nextId:nextId,
+  var FORMAT=1;
+
+  function serialize(){
+    return {
+      meristem:FORMAT, root:rootId(), cur:curId, seq:seq, nextId:nextId,
       nodes:Object.keys(nodes).map(function(id){
         var n=nodes[id];
         return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
                 quote:n.quote,note:n.note,s:n.s,e:n.e,para:n.para,
                 merge:!!n.merge,status:n.status||"open"};
       })
-    },null,1);
+    };
   }
+  function exportTree(){ return JSON.stringify(serialize(),null,1); }
 
-  function importTree(raw){
-    var data;
-    try{ data=JSON.parse(raw); }
-    catch(e){ toast("That isn't valid thread data"); return false; }
-    if(!data||!Array.isArray(data.nodes)||!data.nodes.length){ toast("No pages in that data"); return false; }
+  /* Turn arbitrary parsed JSON into a consistent node map, or null. Anchors are
+     clamped to the page they sit on: a hand-edited or older thread can carry
+     indices past the end of its own text, and an out-of-range anchor used to
+     throw straight through the note list and blank the sheet. */
+  function hydrate(data){
+    if(!data||!Array.isArray(data.nodes)||!data.nodes.length) return null;
 
     var fresh={};
     data.nodes.forEach(function(n){
@@ -1366,41 +1651,116 @@
       };
     });
     var ids=Object.keys(fresh);
-    if(!ids.length){ toast("No usable pages in that data"); return false; }
+    if(!ids.length) return null;
 
     /* rebuild kid links from parents so the two can't disagree */
+    var dropped=0;
     ids.forEach(function(id){
+      var before=fresh[id].parents.length;
       fresh[id].parents=fresh[id].parents.filter(function(pid){ return fresh[pid]; });
+      dropped+=before-fresh[id].parents.length;
       fresh[id].parents.forEach(function(pid){ fresh[pid].kids.push(id); });
       fresh[id].merge=fresh[id].parents.length>1;
     });
 
-    var roots=ids.filter(function(id){ return !fresh[id].parents.length; });
-    if(!roots.length){ toast("That thread has no starting page"); return false; }
-
-    nodes=fresh;
-    seq=Math.max(data.seq|0, ids.length);
-    nextId=Math.max(data.nextId|0, 1);
     ids.forEach(function(id){
-      fresh[id].notes.forEach(function(nt){ nextId=Math.max(nextId,(nt.id|0)+1); });
+      var last=Math.max(0,tokensOf(fresh[id].text).length-1);
+      fresh[id].notes=fresh[id].notes.filter(function(nt){
+        return nt && typeof nt.text==="string";
+      }).map(function(nt){
+        var s=Math.max(0,Math.min(nt.s|0,last));
+        var e=Math.max(s,Math.min(nt.e|0,last));
+        return {id:nt.id|0, s:s, e:e, text:nt.text};
+      });
     });
-    focusNode(fresh[data.cur]?data.cur:roots[0]);
-    toast(ids.length+" page"+(ids.length>1?"s":"")+" loaded");
+
+    var roots=ids.filter(function(id){ return !fresh[id].parents.length; });
+    if(!roots.length) return null;
+
+    var next=Math.max(data.nextId|0,1);
+    ids.forEach(function(id){
+      fresh[id].notes.forEach(function(nt){ next=Math.max(next,(nt.id|0)+1); });
+    });
+
+    return {
+      map:fresh, ids:ids, roots:roots, dropped:dropped,
+      seq:Math.max(data.seq|0, ids.length), nextId:next,
+      cur:fresh[data.cur]?data.cur:roots[0]
+    };
+  }
+
+  function adopt(h){
+    nodes=h.map; seq=h.seq; nextId=h.nextId;
+    treeNotes=[]; picked=[]; collapsed={}; expanded={};
+    focusNode(h.cur);
+  }
+
+  function importTree(raw){
+    var data;
+    try{ data=JSON.parse(raw); }
+    catch(e){ toast("That isn't valid thread data"); return false; }
+    if(!data||!Array.isArray(data.nodes)||!data.nodes.length){ toast("No pages in that data"); return false; }
+
+    var h=hydrate(data);
+    if(!h){ toast("No usable pages in that data"); return false; }
+    adopt(h);
+    toast(h.ids.length+" page"+(h.ids.length>1?"s":"")+" loaded"+
+          (h.dropped?" ("+h.dropped+" broken link"+(h.dropped>1?"s":"")+" dropped)":""));
+    return true;
+  }
+
+  /* ---------------- autosave ----------------
+     The whole point of this app is a thread that accumulates over several
+     rounds, so losing it to a refresh was the worst thing it did. Written on a
+     short debounce after any change; restored on load. */
+  var SAVE_KEY="meristem.thread.v1";
+  var saveTimer=null, saveBroken=false;
+
+  function storage(){
+    try{ return window.localStorage; }catch(e){ return null; }
+  }
+  function save(){
+    var store=storage();
+    if(!store||saveBroken||!curId||!Object.keys(nodes).length) return;
+    try{ store.setItem(SAVE_KEY,JSON.stringify(serialize())); }
+    catch(e){
+      /* Quota, or private mode on some browsers. Say it once and stop trying. */
+      saveBroken=true;
+      toast("Couldn't autosave — export to keep this thread");
+    }
+  }
+  function saveSoon(){
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer=setTimeout(function(){ saveTimer=null; save(); },400);
+  }
+  function clearSaved(){
+    var store=storage();
+    if(!store) return;
+    try{ store.removeItem(SAVE_KEY); }catch(e){}
+  }
+  function restore(){
+    var store=storage();
+    if(!store) return false;
+    var raw;
+    try{ raw=store.getItem(SAVE_KEY); }catch(e){ return false; }
+    if(!raw) return false;
+    var h;
+    try{ h=hydrate(JSON.parse(raw)); }catch(e){ h=null; }
+    if(!h){ clearSaved(); return false; }
+    adopt(h);
     return true;
   }
 
   $("importbtn").addEventListener("click",function(){
     $("importtxt").value="";
-    $("importin").classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ $("importtxt").focus(); },30);
+    openOverlay($("importin"),$("importtxt"));
   });
   $("importsave").addEventListener("click",function(){
     var v=$("importtxt").value.trim();
     if(!v) return;
-    if(importTree(v)) $("importin").classList.remove("on");
+    if(importTree(v)) closeOverlay($("importin"));
   });
-  $("importcancel").addEventListener("click",function(){ $("importin").classList.remove("on"); });
+  $("importcancel").addEventListener("click",function(){ closeOverlay($("importin")); });
 
   /* ---- drag and drop a thread file ---- */
   function readThreadFile(f){
@@ -1408,7 +1768,7 @@
     if(f.size>8*1024*1024){ toast("That file is too big"); return; }
     var r=new FileReader();
     r.onload=function(){
-      if(importTree(String(r.result))) $("importin").classList.remove("on");
+      if(importTree(String(r.result))) closeOverlay($("importin"));
     };
     r.onerror=function(){ toast("Couldn't read that file"); };
     r.readAsText(f);
@@ -1460,14 +1820,30 @@
   });
   $("importin").addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
-    if(e.target===$("importin")) $("importin").classList.remove("on");
+    if(e.target===$("importin")) closeOverlay($("importin"));
   });
 
+  /* Import already takes a dropped file, so export should produce one. Falls
+     back to the clipboard where downloads aren't available. */
+  function exportName(){
+    var d=new Date(), p=function(v){ return (v<10?"0":"")+v; };
+    return "meristem-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+
+           "-"+p(d.getHours())+p(d.getMinutes())+".json";
+  }
   $("exportbtn").addEventListener("click",function(){
     var txt=exportTree();
-    if(legacyCopy(txt)) toast("Thread copied");
-    else if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast("Thread copied"); });
-    else toast("Couldn't copy");
+    var url=null;
+    try{
+      var a=document.createElement("a");
+      if(typeof a.download!=="string" || !window.URL || !URL.createObjectURL) throw 0;
+      url=URL.createObjectURL(new Blob([txt],{type:"application/json"}));
+      a.href=url; a.download=exportName();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      toast("Thread saved");
+    }catch(e){
+      copyText(txt,"Thread copied");
+    }
+    if(url) setTimeout(function(){ URL.revokeObjectURL(url); },4000);
   });
 
   function tokensOf(text){
@@ -1520,15 +1896,15 @@
   });
   $("replysave").addEventListener("click",function(){
     var v=$("replytxt").value;
-    $("replyin").classList.remove("on");
+    closeOverlay($("replyin"));
     if(!v.trim()){ treeReplyMode=false; return; }
     if(treeReplyMode){ treeReplyMode=false; attachTreeReplies(v); }
     else attachReplies(v);
   });
-  $("replycancel").addEventListener("click",function(){ $("replyin").classList.remove("on"); });
+  $("replycancel").addEventListener("click",function(){ closeOverlay($("replyin")); });
   $("replyin").addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
-    if(e.target===$("replyin")) $("replyin").classList.remove("on");
+    if(e.target===$("replyin")) closeOverlay($("replyin"));
   });
 
   function readSurface(){
@@ -1551,6 +1927,7 @@
     readerEl.setAttribute("contenteditable","true");
     readerEl.classList.add("editing");
     readerEl.dataset.empty=readSurface().trim()?"0":"1";
+    document.body.classList.remove("reading");
     $("setup").hidden=false;
     $("edit").hidden=true; $("reset").hidden=true; $("go").hidden=false;
     sheetEl.classList.remove("open"); chevEl.innerHTML="\u25B2";
@@ -1559,10 +1936,32 @@
     $("scroller").scrollTop=keep;
   }
 
+  /* Count everything that would go: the replies hanging off this page, plus
+     anything hanging off those, since orphans get dropped too. */
+  function descendantsOf(id,seen){
+    seen=seen||{};
+    var out=[];
+    (nodes[id]?nodes[id].kids:[]).forEach(function(k){
+      if(seen[k]||!nodes[k]) return;
+      seen[k]=true;
+      out.push(k);
+      out=out.concat(descendantsOf(k,seen));
+    });
+    return out;
+  }
+
   $("edit").addEventListener("click",function(){
     var n=node();
-    if(n&&(n.notes.length||n.kids.length)) toast("Editing clears this page's notes and replies");
     if(n){
+      var kids=descendantsOf(n.id).length, mine=n.notes.length;
+      if(kids||mine){
+        var what=[];
+        if(mine) what.push(mine+" note"+(mine>1?"s":""));
+        if(kids) what.push(kids+" repl"+(kids>1?"ies":"y"));
+        /* This used to delete first and toast afterwards, with no way back. */
+        if(!confirm("Editing this text will delete "+what.join(" and ")+
+                    " on this page.\n\nThis cannot be undone. Continue?")) return;
+      }
       n.kids.forEach(function(k){
         if(nodes[k]){
           nodes[k].parents=nodes[k].parents.filter(function(x){ return x!==n.id; });
@@ -1571,7 +1970,6 @@
       });
       n.kids=[]; n.notes=[];
     }
-    notes=n?n.notes:[];
     render(); refresh(); syncNav();
     toEditor();
   });
@@ -1582,9 +1980,7 @@
   var readMode=false, collapsed={};
   var picked=[], treeNotes=[], treeTarget=null, treeReplyMode=false, selectMode=false;
   function inTree(){ return !$("treeview").hidden; }
-  function activeNotes(){ return inTree()?treeNotes:notes; }
-  function inTree(){ return !$("treeview").hidden; }
-  function activeNotes(){ return inTree()?treeNotes:notes; }
+  function activeNotes(){ return inTree()?treeNotes:pageNotes(); }
   var LAYER=300, SPREAD=230;
   var expanded={};   // pages the reader has opened out in place
   /* full-text cards are far bigger, so the whole scene has to open up */
@@ -1829,18 +2225,50 @@
           }
         });
 
+        /* Bounds at the zoom we actually settled on. Perspective shifts with
+           zoom, so the span measured at 1 is not the span you get. */
+        var bx0=Infinity,bx1=-Infinity,by0=Infinity,by1=-Infinity;
+        ids.forEach(function(id){
+          var C=box[id];
+          if(C.x-C.w<bx0) bx0=C.x-C.w;
+          if(C.x+C.w>bx1) bx1=C.x+C.w;
+          if(C.y-C.h<by0) by0=C.y-C.h;
+          if(C.y+C.h>by1) by1=C.y+C.h;
+        });
+        var realW=Math.max(1,bx1-bx0), realH=Math.max(1,by1-by0);
+        var shrink=Math.min(1, Math.min(vw/realW, vh/realH));
+        if(shrink<1){
+          zoom=Math.max(.12,zoom*shrink);
+          bx0*=shrink; bx1*=shrink; by0*=shrink; by1*=shrink;
+        }
+
         var score=overlaps*120 + crossings*8 - zoom*14;
-        if(!best || score<best.score) best={yaw:yaw,pitch:pitch,zoom:zoom,score:score,overlaps:overlaps,crossings:crossings};
+        if(!best || score<best.score) best={
+          yaw:yaw, pitch:pitch, zoom:zoom, score:score,
+          overlaps:overlaps, crossings:crossings,
+          cx:(bx0+bx1)/2, cy:(by0+by1)/2
+        };
       });
     });
     return best;
   }
 
+  /* The scene's origin, from .scene{left:50%;top:45%} in the stylesheet. Fit
+     has to know it: projected coordinates are measured from the origin, not
+     from the middle of the viewport. Keep the two in step. */
+  var SCENE_ORIGIN_X=0.50, SCENE_ORIGIN_Y=0.45;
+
   function fitAll(){
     var b=bestView();
     if(!b) return;
     view.yaw=b.yaw; view.pitch=b.pitch; view.zoom=b.zoom;
-    view.panX=0; view.panY=0;
+    /* Zoom alone never fitted anything: the camera stayed pinned to the selected
+       page, so unless the content happened to be centred on it the map hung off
+       an edge. Slide the content's own middle to the middle of the viewport. */
+    var body=$("treebody");
+    var W=body.clientWidth||960, H=body.clientHeight||620;
+    view.panX=(0.5-SCENE_ORIGIN_X)*W - b.cx;
+    view.panY=(0.5-SCENE_ORIGIN_Y)*H - b.cy;
   }
 
   function cardHTML(id){
@@ -1976,9 +2404,7 @@
     typeTarget=null;
     typeQ.textContent=treeTarget.length+" page"+(treeTarget.length>1?"s":"")+" selected";
     typeTxt.value="";
-    typeEl.classList.add("on");
-    overlayAt=Date.now();
-    setTimeout(function(){ typeTxt.focus(); },30);
+    openOverlay(typeEl,typeTxt);
   }
 
   function addTreeNote(text){
@@ -2013,13 +2439,17 @@
   }
 
   function attachTreeReplies(raw){
-    var map=parseReply(raw), keep=[], hit=0;
+    var parsed=parseReply(raw), map=parsed.answers, keep=[], hit=0;
+    var found=treeNotes.filter(function(n,i){ return map[String(i+1)]; }).length;
+    if(!found){ toast("No numbered answers found"); return; }
+    if(!parsed.fenced &&
+       !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
     treeNotes.forEach(function(n,i){
       var ans=map[String(i+1)];
       if(ans){ hit++; makeNode(ans.trim(), n.ids, {note:n.text, quote:""}); }
       else keep.push(n);
     });
-    if(!hit){ toast("No numbered answers found"); return; }
     treeNotes=keep; picked=[];
     drawTree();
     toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
@@ -2288,15 +2718,20 @@
     $("scroller").classList.toggle("scrolled",$("scroller").scrollTop>6);
   });
 
-  syncMode();
-  toEditor();
   $("reset").addEventListener("click",function(){
+    var pages=Object.keys(nodes).length;
+    if(pages && !confirm("Start over?\n\nThis discards "+pages+" page"+(pages>1?"s":"")+
+                         " and everything on them. Export first if you want to keep it.")) return;
     nodes={}; curId=null; seq=0;
-    notes=[]; words=[]; TOK=[];
+    words=[]; TOK=[]; treeNotes=[]; picked=[]; collapsed={}; expanded={};
     readerEl.innerHTML="";
+    clearSaved();
     refresh(); syncNav();
     toEditor();
   });
+
+  syncMode();
+  if(!restore()) toEditor();
 })();
 </script>
 </body>
