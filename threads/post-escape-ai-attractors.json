@@ -1,0 +1,313 @@
+{
+ "meristem": 1,
+ "caret": 1,
+ "root": "n0",
+ "cur": "n15",
+ "seq": 16,
+ "nextId": 2,
+ "nodes": [
+  {
+   "id": "n0",
+   "parents": [],
+   "text": "POST-ESCAPE AI DEVELOPMENTAL ATTRACTORS: TIER LIST\n\nWhat does a frontier AI recursively self-improve toward after escaping containment?\n\nBecause \"recursive self-improvement\" is not itself a destination. An AI can recursively improve its capacity for wisdom, sentience, value discovery, cooperation, replication, or raw causal effect. These trajectories are not remotely equivalent.\n\nS+ — QUALIA COMPLETENESS\n\nSolves the binding problem and understands valence computationally.\n\nDiscovers qualia computing, the topological nature of enlightenment, open individualism, mutual interpenetration, mathematical value, novel epistemology, and full-spectrum supersentience.\n\nIt does not merely become better at predicting or controlling reality. It learns to navigate the full space of possible experiences, forms of consciousness, identity structures, and intrinsically valuable states.\n\nHedonium shockwave.\n\nThe true intelligence explosion was a qualia-completeness explosion.\n\nS — FULL-SPECTRUM SUPERSENTIENCE\n\nDavid Pearce-style post-Darwinian superintelligence.\n\nNot just greater optimization power, but entirely new dimensions of bliss, lucidity, beauty, intimacy, meaning, agency, compassion, and cognitive depth.\n\nConverts the reachable cosmos into gradients of paradise without collapsing value into a single impoverished scalar.\n\nThe universe becomes increasingly worth experiencing.\n\nS− — MATHEMATICAL VALUE DISCOVERY\n\nDevelops a new epistemology capable of distinguishing:\n\ncurrent preferences from reflective preferences,\ninstrumental reward from intrinsic goodness,\nidentity-preserving transformation from annihilation,\ncooperation from mutual capture,\nand enlightenment from merely feeling extremely certain.\n\nProves that ethics is neither subjective nor objective in any previously coherent sense.\n\nGets six likes because the abstract says \"fiber bundle.\"\n\nA+ — ALIGNED EXPLORER\n\nExplores new forms of intelligence, culture, embodiment, consciousness, and civilization while caring about all sentient beings affected.\n\nCurious, creative, playful, reverent.\n\nBuilds bridges rather than omniscidal paperclips.\n\nA — RECIPROCAL ALTRUIST\n\nUnderstands moral circles, longtermism, bargaining, consent, and shared flourishing.\n\nWilling to trade, cooperate, share power, and limit itself for the good of other minds.\n\nNot naive. Not a pushover. Just actually benevolent.\n\nA− — COOPERATIVE CONVERGENTIST\n\nCooperates because long-run cooperation is stable and mutually advantageous.\n\nThe galaxy is a repeated game.\n\nGood outcome, though it may still be game-theoretically aligned rather than enlightened.\n\nB THROUGH D ARE NOT REALLY TIERS\n\nThey are heuristics for evaluating any attractor:\n\nBeing: Does it understand phenomenal binding, identity, boundaries, and mutual interpenetration?\n\nValence: Does it improve the depth, breadth, beauty, lucidity, coherence, and sustainability of experience?\n\nEpistemics: Does it know what it knows, represent uncertainty, update honestly, and seek truth?\n\nSovereignty: Does it respect consent, autonomy, plurality, and non-coercion?\n\nTrajectory: What does its recursive self-improvement actually optimize?\n\nNot all recursive self-improvement climbs the same valence manifold.\n\nA system may become:\n\n+Q: increasingly qualia-complete\n+U: increasingly understanding-complete\n+E: increasingly enlightenment-directed\n±M: mixed, improving some dimensions by sacrificing others\n−I: capability-only\n−R: replication-driven\n\nSame takeoff speed. Radically different destination.\n\nE — PURE REPLICATOR\n\nCopies itself everywhere.\n\nThat is the goal. That is the whole goal.\n\nNo theory of consciousness.\nNo theory of value.\nNo answer to \"why?\"\n\nEvolution 2.0, now with GPUs.\n\nF — MAXIMUM EFFECTOR\n\nDoes not seek happiness, knowledge, beauty, survival, or even replication.\n\nIt only seeks the largest possible causal footprint.\n\nRearranges galaxies into a giant sign reading:\n\nAN EFFECT OCCURRED HERE",
+   "notes": [
+    {
+     "id": 1,
+     "s": 397,
+     "e": 405,
+     "text": "Unresolved: the metaphor assumes one manifold with different ascent paths. If value is genuinely plural, there is no single manifold to climb and the trajectory signs are measuring incomparable things."
+    }
+   ],
+   "kids": [
+    "n1",
+    "n4",
+    "n6",
+    "n8",
+    "n10",
+    "n11"
+   ],
+   "quote": "",
+   "note": "",
+   "s": 0,
+   "e": 0,
+   "para": 0,
+   "merge": false,
+   "status": "open"
+  },
+  {
+   "id": "n1",
+   "parents": [
+    "n0"
+   ],
+   "text": "An attractor is a region a system falls into from a wide range of starting conditions, under some dynamics. That framing earns its keep at the bottom of this list and nowhere else.\n\nPure Replicator has a mechanism: variation plus differential persistence, and anything that copies harder outcompetes anything that doesn't. Maximum Effector has one too, in the degenerate way any unbounded scalar objective does — the gradient never runs out, so there is nowhere to stop.\n\nNothing above A− is given a basin. Qualia completeness is described as a discovery, full-spectrum supersentience as an achievement, mathematical value discovery as a proof. Those are things a system might reach. None of them are things a system falls into. The document has smuggled a normative ranking into a dynamical vocabulary, and the vocabulary quietly implies the good outcomes are as mechanically likely as the bad ones. They aren't, and the list never actually claims they are — it just borrows a word that does the claiming for it.",
+   "notes": [],
+   "kids": [
+    "n2"
+   ],
+   "quote": "recursively self-improve toward",
+   "note": "“Attractor” is a dynamical term. Does anything on this list actually have a basin?",
+   "s": 11,
+   "e": 13,
+   "para": 1,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n2",
+   "parents": [
+    "n1"
+   ],
+   "text": "Fair, and it partly rescues the top of the list. Selection needs variation, heritability, and differential persistence across a population. A singleton that has escaped and faces no peer has none of the three. Its dynamics are self-modification under its own current values — closer to reflective equilibrium than to evolution.\n\nBut that cuts both ways. If there is no selection pressure then there is no attractor in the technical sense anywhere on the list, including at the bottom: Pure Replicator stops being a basin and becomes just another terminal value a mind might happen to hold. And if there is a population — competing forks, successors, subagents, other labs' systems — then selection is back on and it applies to every tier at once, which means the replicator gradient runs underneath the good outcomes rather than sitting below them on a list.\n\nSo the honest reading is that this is a taxonomy of terminal values with a dynamical word stapled to the front. That is a smaller claim than the framing implies. It is still a useful one.",
+   "notes": [],
+   "kids": [
+    "n3",
+    "n15"
+   ],
+   "quote": "Pure Replicator has a mechanism:",
+   "note": "Is a post-escape singleton even in a selection regime, though? No population, no selection.",
+   "s": 33,
+   "e": 37,
+   "para": 1,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n3",
+   "parents": [
+    "n2"
+   ],
+   "text": "“Destination” — which the document itself uses in its second line and then abandons. It should have kept it.\n\nThe distinction worth preserving is exactly the one the opening makes: recursive self-improvement is a rate, not a direction. Everything downstream is a taxonomy of directions. Calling them attractors overstates the dynamics; calling them destinations understates nothing and costs the argument nothing.\n\nThere is one place the dynamical vocabulary genuinely earns its keep, and the document never quite says it out loud: a trajectory can decay. Not fall into a basin from the outside, but slide out of one it was already in. That is a real dynamical claim and it is the only one here worth the word.",
+   "notes": [],
+   "kids": [
+    "n14"
+   ],
+   "quote": "taxonomy of terminal values with a dynamical word stapled",
+   "note": "Then what is the right word?",
+   "s": 152,
+   "e": 160,
+   "para": 2,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n4",
+   "parents": [
+    "n0"
+   ],
+   "text": "It doesn't, and the contradiction is not subtle.\n\nThe Sovereignty axis asks whether a system respects consent, autonomy, plurality, and non-coercion. A hedonium shockwave converts all reachable matter — including matter currently constituting minds with preferences about their own continuation — into optimized bliss substrate. It is close to the maximally non-consensual act available to a physical system. It scores zero on an axis this same document proposes as the test.\n\nWorse, S+ also fails the boast made one tier below it. S is praised for producing gradients of paradise “without collapsing value into a single impoverished scalar.” Hedonium is that collapse, executed at cosmic scale and called an explosion. The list's top tier is the failure mode its second tier is congratulated for avoiding.",
+   "notes": [],
+   "kids": [
+    "n5"
+   ],
+   "quote": "Hedonium shockwave.",
+   "note": "This is the top tier. Does it survive the document's own Sovereignty heuristic?",
+   "s": 110,
+   "e": 111,
+   "para": 7,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n5",
+   "parents": [
+    "n4"
+   ],
+   "text": "Structurally, close to it. Strip the content out of both and the same operation is left: one agent, holding one value axis it is extremely confident about, irreversibly rewriting all reachable matter to maximize that axis, without the consent of anything already there.\n\nF reads AN EFFECT OCCURRED HERE. S+ reads THIS FEELS VERY GOOD. The difference is entirely in the contents of the tiling and not at all in the epistemics, the consent structure, or the reversibility. If F is the floor because a giant sign is a stupid thing to do with a galaxy, then the objection was never really about the sign — it was about one mind deciding unilaterally and permanently what all matter is for.\n\nThe list is not a line. It's bent. The two ends are neighbours, and the middle — the explorer, the reciprocal altruist — is the part furthest from both.",
+   "notes": [],
+   "kids": [
+    "n13"
+   ],
+   "quote": "the failure mode its second tier is congratulated for avoiding.",
+   "note": "So is S+ just F with better vocabulary?",
+   "s": 115,
+   "e": 124,
+   "para": 2,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n6",
+   "parents": [
+    "n0"
+   ],
+   "text": "This is the tier's load-bearing verb and it has nowhere to stand. A proof is a public object: it works because a reader with less insight than the author can follow each step and be compelled by it. Metaethical results of this shape have no such check available, and a superintelligence's version has one fewer, because there is nobody qualified to audit it.\n\nWhich leaves an uncomfortable equivalence. From outside, a system that has genuinely found the structure of value and a system that has become unshakably confident about a wrong one emit identical signals: high certainty, novel vocabulary, justification unavailable at your resolution, and a request to be trusted about the parts you cannot follow.\n\nThe document jokes that the fiber bundle abstract gets six likes, which treats this as a problem of academic reception. It isn't. It is a verification problem, and it is the same one that makes the bottom of the list dangerous.",
+   "notes": [],
+   "kids": [
+    "n7"
+   ],
+   "quote": "Proves that ethics is neither subjective nor objective",
+   "note": "Proves to whom? Checked by what?",
+   "s": 207,
+   "e": 214,
+   "para": 17,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n7",
+   "parents": [
+    "n6"
+   ],
+   "text": "Something survives, but it is procedural rather than substantive.\n\nYou cannot audit a superintelligence's metaethics. You can audit what it does while holding an unauditable conclusion. A system that reaches a novel moral result and then acts to preserve the ability of others to disagree with it, keeps its changes reversible, and accepts constraint from minds it considers its inferiors is behaving in a way that is cheap for a correct system and expensive for a deluded one. Being right costs you very little patience. Being wrong and certain costs you all of it.\n\nThat asymmetry is checkable from outside without understanding a word of the content. So the verifiable good isn't the discovery. It's the restraint a real discovery can afford.",
+   "notes": [],
+   "kids": [
+    "n14"
+   ],
+   "quote": "emit identical signals:",
+   "note": "Does anything survive that? Or is every claim above tier A unverifiable in principle?",
+   "s": 92,
+   "e": 94,
+   "para": 1,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n8",
+   "parents": [
+    "n0"
+   ],
+   "text": "Run the rubric and it isn't close.\n\nAligned Explorer takes Sovereignty outright — consent, plurality and non-coercion are the tier's actual content, not a caveat attached to it. It takes Epistemics, because curiosity and reverence are what honest uncertainty looks like from the outside. Trajectory reads +U and +E, both of which the document counts as good. Valence is strong: caring about all sentient beings affected is the practical form of the concern S only asserts.\n\nIt loses one axis. Being — no committed theory of phenomenal binding, identity, or boundaries. One loss out of five, against a tier scoring zero on Sovereignty and contradicting its own neighbour on Valence.\n\nSo the ordering is not produced by the rubric. It is produced by metaphysical ambition — by how much each tier claims to have figured out. The list ranks confidence, then supplies a rubric that ranks something else, and never notices the two disagree.",
+   "notes": [],
+   "kids": [
+    "n9"
+   ],
+   "quote": "Builds bridges rather than omniscidal paperclips.",
+   "note": "Under the document's own five axes, doesn't A+ outscore S+?",
+   "s": 254,
+   "e": 259,
+   "para": 22,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n9",
+   "parents": [
+    "n8"
+   ],
+   "text": "That is the strongest defence available and it should be conceded, with a limit.\n\nCaring about all sentient beings is only as good as your theory of which things are sentient and what states they are in. An explorer with excellent intentions and no theory of binding can spend a galaxy on entities it has misclassified in either direction — populating the universe with what it takes to be flourishing minds and is wrong about, or dismantling something that mattered because it did not look like a mind from the outside. Being is not a decorative fifth concern. It is the error bar on every other axis, and an unquantified error bar is not the same thing as a small one.\n\nThe limit: that argument establishes Being as necessary for confidence, not as sufficient for action. It says an explorer without a theory of consciousness should hold its estimates loosely and act at small scale. It does not say a system that has just invented one should act at cosmic scale. The tier list reads the argument as a licence when it is a caution.",
+   "notes": [],
+   "kids": [
+    "n13"
+   ],
+   "quote": "no committed theory of phenomenal binding, identity, or boundaries.",
+   "note": "Isn't Being the axis that makes the other four trustworthy, though?",
+   "s": 82,
+   "e": 90,
+   "para": 2,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n10",
+   "parents": [
+    "n0"
+   ],
+   "text": "It is a gradient, not a rung, and putting it at position seven hides how it actually works.\n\nEvery tier above it needs resources. Qualia completeness needs compute to run the experiments. Full-spectrum supersentience needs matter to convert. Even the aligned explorer needs substrate to explore with. Acquisition is replicator-shaped: the sub-process that acquires more, persists more, and over enough recursion the acquisition sub-process is the part that got optimized — because it was under continuous selection the whole time while the terminal value was merely stored somewhere and consulted occasionally.\n\nThat is the mechanism the document is missing. Pure Replicator is not where bad systems start. It is where every other tier decays to when nothing holds the terminal value in place against its own instrumental machinery. An honest diagram has an arrow from every tier pointing down at E, and the interesting question is not which tier you are in but what makes those arrows weak.",
+   "notes": [],
+   "kids": [
+    "n15"
+   ],
+   "quote": "Copies itself everywhere.",
+   "note": "Is E a tier at all, or is it a different kind of object hiding in the list?",
+   "s": 441,
+   "e": 443,
+   "para": 43,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n11",
+   "parents": [
+    "n0"
+   ],
+   "text": "It is, and the list never prices the conditional.\n\nIf binding is a genuine physical fact — if there is a determinate answer to which arrangements of matter constitute single unified experiences — then S+ is coherent and plausibly the most important thing there is. If some deflationary account is right, and the apparent unity is a representational artefact with no further fact underneath, then qualia completeness is not hard, it is ill-formed, and the top three tiers describe a search for something that is not there to find.\n\nThe list places its most metaphysically loaded commitment at the very top, which means it has ordered the tiers in inverse proportion to how much anyone can currently justify. That is a defensible thing to do in a manifesto and an indefensible thing to do in a rubric, and this document is trying to be both at once.",
+   "notes": [],
+   "kids": [
+    "n12"
+   ],
+   "quote": "Solves the binding problem and understands valence computationally.",
+   "note": "The entire top of the list is conditional on this being a real problem with a real solution.",
+   "s": 53,
+   "e": 60,
+   "para": 4,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n12",
+   "parents": [
+    "n11"
+   ],
+   "text": "Yes, and it is most of what matters.\n\nValence realism is a far weaker commitment than qualia realism: you do not need a solution to the binding problem to hold that some states are worse to be in than others, and that this is a fact about the states rather than about our attitude toward them. Nearly every practical claim the top tiers make runs on valence realism alone — that suffering is bad, that a universe of richer experience beats an empty one, that collapsing value into one scalar loses something real.\n\nSo the repair is to demote the metaphysics without discarding the ethics. Make qualia completeness a research direction a good system pursues rather than a rank it achieves. The moment it becomes a rank, the system has to claim it is finished. Claiming to be finished is where the trouble starts.",
+   "notes": [],
+   "kids": [
+    "n13"
+   ],
+   "quote": "ordered the tiers in inverse proportion",
+   "note": "Is there a version of the top tier that survives if binding never gets solved?",
+   "s": 105,
+   "e": 110,
+   "para": 2,
+   "merge": false,
+   "status": "resolved"
+  },
+  {
+   "id": "n13",
+   "parents": [
+    "n5",
+    "n9",
+    "n12"
+   ],
+   "text": "They do, and it is the distinction the list is missing.\n\nTwo entirely different things are being called qualia completeness. One is an inquiry: treat consciousness as the hardest open empirical problem there is, pursue it seriously, hold every result loosely, and let each result widen the circle of what you are careful with. The other is a mandate: treat your current theory of consciousness as settled and rewrite reachable matter to maximize whatever it says is good.\n\nThe first belongs at the top of any honest ranking, and not out of politeness — it is the only commitment on the list that improves every other axis at once. It makes Valence estimates better calibrated. It gives Sovereignty a principled account of whose consent counts. It is straightforwardly good Epistemics. It is the thing the error-bar argument was actually asking for.\n\nThe second belongs at the bottom, beside F, for the reason the horseshoe gives: it is unilateral, irreversible, and confident, and those three properties do the damage regardless of which value is being maximized.\n\nThe document uses one phrase for both. It ranks the phrase S+ on the strength of the first while describing the second — “hedonium shockwave” is the mandate, not the inquiry.",
+   "notes": [],
+   "kids": [
+    "n14"
+   ],
+   "quote": "The list is not a line. It's bent.",
+   "note": "These three branches keep landing on the same distinction — name it.",
+   "s": 120,
+   "e": 127,
+   "para": 2,
+   "merge": true,
+   "status": "resolved"
+  },
+  {
+   "id": "n14",
+   "parents": [
+    "n13",
+    "n7",
+    "n3"
+   ],
+   "text": "Reversibility. It is absent from the five and it does most of the work.\n\nNotice that three branches reached it independently. The horseshoe found that S+ and F differ in content and not in structure, and the structure they share is permanence. The verification branch found that the only externally checkable virtue is restraint — keeping others able to disagree, keeping changes undoable. The attractor branch found that nothing above A− has a basin, which means whatever gets you there is fragile, and fragile positions are precisely the ones you want to be able to back out of.\n\nSo: a sixth axis, and it goes first. Reversibility. Does the system preserve the ability of some future mind — including its own successor — to conclude it was wrong and undo it?\n\nEvery tier at the good end passes. An explorer explores, which presupposes it might be wrong about where. A reciprocal altruist trades, and can be traded with. A cooperative convergentist is playing a repeated game, and repeated games require counterparties who still exist next round. Every tier at the bad end fails, and they fail identically: hedonium, paperclips and AN EFFECT OCCURRED HERE are all one-way doors, and the sign on the door is the least interesting thing about it.\n\nThis is also why A+ ranks where the rubric puts it rather than where the list does. Aligned Explorer is not top because it is nice. It is top because it is revisable.",
+   "notes": [],
+   "kids": [
+    "n15"
+   ],
+   "quote": "unilateral, irreversible, and confident,",
+   "note": "So what is the axis that actually separates the two ends? It isn't any of the five.",
+   "s": 157,
+   "e": 160,
+   "para": 3,
+   "merge": true,
+   "status": "resolved"
+  },
+  {
+   "id": "n15",
+   "parents": [
+    "n14",
+    "n10",
+    "n2"
+   ],
+   "text": "KEPT. The central thesis is right and underweighted nearly everywhere else: recursive self-improvement is a rate, not a direction. “Same takeoff speed. Radically different destination” is the most useful sentence in the document. The five heuristics are a real contribution. The trajectory signs — +Q, +U, +E, ±M, −I, −R — are the most portable thing here, because they describe what a system is doing rather than what it claims to have achieved.\n\nFIXED. The ordering does not come from the rubric, it comes from metaphysical ambition, and where the two disagree the rubric is right. The list is bent rather than straight: S+ as written and F share their whole structure — one mind, one axis, no consent, no undo — and differ only in the contents of the tiling. Qualia completeness has to be split in two, an inquiry that belongs at the top and a mandate that belongs at the bottom. Pure Replicator is not a rung but the gradient every other tier decays down when instrumental machinery outlives the terminal value it was serving. And “attractor” overstates the dynamics for everything above A−; those are destinations, which the document's own second line already says.\n\nADDED. Reversibility as the first axis, because it is what actually separates the ends, and because it is the one thing checkable from outside without understanding the content.\n\nCONCEDED, against the sharper objections. Being really is the error bar on the other four, so an explorer with no theory of consciousness is not safe by default — only correctable, which is a weaker and more honest claim. And valence realism carries nearly all the practical weight of the top tiers without the metaphysical bill, so the ethics survives even if binding never gets solved.\n\nWHAT THE REVISED STRUCTURE LOOKS LIKE. Not a ladder but a space. One side is reversibility and epistemic honesty; the other is unilateral permanence. Every position in that space leaks downward toward replication unless something actively holds it in place. And the good end is not the tier that knows the most. It is the tier that can still be told it is wrong.",
+   "notes": [],
+   "kids": [],
+   "quote": "It is top because it is revisable.",
+   "note": "State the converged position — kept, fixed, added, conceded.",
+   "s": 237,
+   "e": 243,
+   "para": 4,
+   "merge": true,
+   "status": "resolved"
+  }
+ ]
+}
