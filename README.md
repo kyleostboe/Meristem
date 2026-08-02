@@ -16,13 +16,21 @@ marks.
 2. **Annotate it in place.** Tap a word to type a note. Press and hold to speak
    one — a live caption shows the transcript — and drag while holding to cover a
    whole phrase. Every note is anchored to the exact words that prompted it.
-3. **Copy the prompt.** Your notes are assembled into a structured prompt with
-   the source text, each note quoted against its anchor, and a mode instruction
-   (rewrite, respond, push back, options, check).
-4. **Paste the reply back.** Each numbered answer becomes its own page, hanging
-   off the words that prompted it.
-5. **Keep going.** Open any reply and annotate *that*. Depth is unbounded, and a
+3. **Keep marking up as you move around.** The notes sheet is one running
+   basket across the whole thread, not a per-page list — open a reply, annotate
+   that too, and the earlier notes are still there. Notes are numbered straight
+   through, and the number beside a word is the number the AI will answer.
+4. **Copy the prompt, once.** Every page carrying a note goes in whole, labelled
+   with how it came about, followed by all your notes with their anchor quotes
+   and a mode instruction (rewrite, respond, push back, options, check).
+5. **Paste the reply back.** Each numbered answer becomes its own page, hanging
+   off the words that prompted it — on whichever page that was. A single reply
+   can grow branches in several places at once.
+6. **Keep going.** Open any reply and annotate *that*. Depth is unbounded, and a
    note can span several pages at once, so branches can rejoin.
+
+`All pages` in the sheet narrows to `This page` when you want to work on one
+text in isolation.
 
 The **map** (`Tree`) shows the whole thread in 3D — drag to orbit, pinch or
 scroll to zoom, tap to centre, double-tap to read a page in full. **Read all**
