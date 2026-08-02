@@ -252,6 +252,8 @@
     mask-composite:intersect;
   }
   .treebody:active{cursor:grabbing}
+  /* SCENE_ORIGIN_X / SCENE_ORIGIN_Y in the script mirror these two values —
+     "Fit all" measures from this origin, so change both together. */
   .scene{
     position:absolute;left:50%;top:45%;width:0;height:0;
     transform-style:preserve-3d;
@@ -545,10 +547,19 @@
   var nodes={}, curId=null, seq=0;
   var words=[];      // tokens of the focused page
   var TOK=[];        // alias kept for the annotation code
-  var notes=[];      // focused page's notes — always nodes[curId].notes
   var nextId=1;
 
   function node(){ return nodes[curId]; }
+
+  /* Notes live on their page and are only ever read through here. An earlier
+     version cached nodes[curId].notes in a module variable, which let the two
+     drift apart: deleting a note replaced the cached array without writing it
+     back, and the async speech path appended to whichever page happened to be
+     open when the microphone finally closed. Never cache this. */
+  function pageNotes(id){
+    var n=nodes[id==null?curId:id];
+    return n?n.notes:[];
+  }
 
   function makeNode(text,parentIds,meta){
     var ps=parentIds==null?[]:(Array.isArray(parentIds)?parentIds.slice():[parentIds]);
@@ -573,7 +584,6 @@
         para.trim().split(/\s+/).forEach(function(w){ words.push({t:w,p:pi,c:"src"}); });
       });
     TOK=words.slice();
-    notes=n?n.notes:[];
   }
 
   function depth(id,memo){
@@ -751,7 +761,7 @@
 
   function render(){
     var marksAt={}, annotated={}, done={}, kidsByPara={};
-    notes.forEach(function(n,i){
+    pageNotes().forEach(function(n,i){
       (marksAt[n.e]=marksAt[n.e]||[]).push(i+1);
       for(var k=n.s;k<=n.e;k++) annotated[k]=true;
     });
@@ -948,7 +958,12 @@
     startPt=null; tapIdx=-1;
     engaged=false;
     var a=Math.min(anchorA,anchorB), b=Math.max(anchorA,anchorB);
-    pending={s:a,e:b};
+    /* Stamp the page the words belong to. The microphone closes asynchronously
+       \u2014 on a phone that is a network round trip \u2014 so by the time the transcript
+       lands the reader may well be showing a different page. Without this the
+       note is filed against whatever is open then, carrying this page's token
+       indices, and lands somewhere it can never be read from. */
+    pending={id:curId,s:a,e:b};
     capEl.classList.remove("on");
     stopListening();
   }
@@ -960,67 +975,110 @@
     var p=pending; pending=null;
     if(!p) return;
     var said=heard.trim();
-    if(!said){ askType(p); return; }
-    addNote(p.s,p.e,said);
+    if(!said){
+      /* Nothing was heard. Only offer the typing box if the reader is still on
+         the page the gesture started on; otherwise the anchor is meaningless. */
+      if(p.id===curId) askType(p);
+      else toast("Didn't catch that");
+      return;
+    }
+    addNote(p.s,p.e,said,p.id);
   }
 
-  function addNote(s,e,text){
-    notes.push({id:nextId++,s:s,e:e,text:text});
-    notes.sort(function(x,y){ return x.s-y.s || x.e-y.e; });
-    node().notes=notes;
+  function addNote(s,e,text,pageId){
+    var id=pageId==null?curId:pageId;
+    var target=nodes[id];
+    if(!target) return;
+    var list=target.notes;
+    list.push({id:nextId++,s:s,e:e,text:text});
+    list.sort(function(x,y){ return x.s-y.s || x.e-y.e; });
+    if(id!==curId){
+      /* Filed on the page it was spoken on, which is no longer the page in
+         front of the reader \u2014 say so rather than letting it vanish. */
+      toast("Note saved on the previous page");
+      saveSoon();
+      return;
+    }
     render(); refresh();
   }
 
-  function span(a,b){
-    var out=[]; for(var i=a;i<=b;i++) out.push(TOK[i].t);
+  /* Anchors can outlive the text they point at: an imported thread may carry
+     indices from a different revision, and a note can be filed against a page
+     other than the one on screen. Clamp rather than throw \u2014 one stale anchor
+     must never take down the whole note list. */
+  function span(a,b,toks){
+    var T=toks||TOK;
+    if(!T.length) return "";
+    var lo=Math.max(0,Math.min(a|0,T.length-1));
+    var hi=Math.max(lo,Math.min(b|0,T.length-1));
+    var out=[]; for(var i=lo;i<=hi;i++){ if(T[i]) out.push(T[i].t); }
     return out.join(" ");
   }
-  function quoteFor(n){
-    var core=span(n.s,n.e);
-    if(n.e-n.s>=2) return core;
-    var back=n.s;
-    while(back>0 && n.s-back<6) back--;
-    var lead=back<n.s?span(back,n.s-1):"";
+  function quoteFor(n,toks){
+    var T=toks||TOK;
+    if(!T.length) return "";
+    var s=Math.max(0,Math.min(n.s|0,T.length-1));
+    var e=Math.max(s,Math.min(n.e|0,T.length-1));
+    var core=span(s,e,T);
+    if(e-s>=2) return core;
+    var back=s;
+    while(back>0 && s-back<6) back--;
+    var lead=back<s?span(back,s-1,T):"";
     return (back>0?"\u2026":"")+(lead?lead+" ":"")+core;
   }
 
+  /* Send what was actually pasted. Rebuilding prose from the token array
+     re-joined every run of whitespace to a single space, so indentation, line
+     breaks inside a paragraph, lists and code blocks all reached the model
+     flattened. Tokens are for anchoring; they are not the text. */
   function sourceText(){
-    var out=[], cur=-1, line=[];
-    words.forEach(function(w){
-      if(w.p!==cur){ if(line.length) out.push(line.join(" ")); line=[]; cur=w.p; }
-      line.push(w.t);
-    });
-    if(line.length) out.push(line.join(" "));
-    return out.join("\n\n");
+    var n=node();
+    return n?n.text.replace(/\r/g,"").trim():"";
   }
 
+  /* Models drift off the requested format constantly, so accept the separators
+     they actually reach for \u2014 "1." and "1)" as well as arrows and dashes.
+     Reports whether the [[notes]] fence was present: without it we are reading
+     the whole message and any incidental numbered list looks like an answer,
+     so the caller confirms before acting. */
   function parseReply(raw){
     var m=raw.match(/\[\[notes\]\]([\s\S]*?)(?:\[\[\/notes\]\]|$)/i);
-    var body=m?m[1]:raw;
+    var fenced=!!m;
+    var body=fenced?m[1]:raw;
     var map={}, cur=null;
     body.split(/\n/).forEach(function(L){
-      var hit=L.match(/^\s*\[?(\d{1,3})\]?\s*(?:\u2192|->|=>|:|\u2014|-)\s*(.+)$/);
+      var hit=L.match(/^\s*\[?(\d{1,3})\]?\s*(?:\u2192|->|=>|:|\u2014|[-.)])\s*(.+)$/);
       if(hit){ cur=hit[1]; map[cur]=(map[cur]?map[cur]+"\n":"")+hit[2].trim(); }
-      else if(cur && L.trim()) map[cur]+="\n"+L.trim();
+      /* Only glue trailing lines onto the previous answer inside a fence. In an
+         unfenced message those lines are ordinary prose, not continuations. */
+      else if(fenced && cur && L.trim()) map[cur]+="\n"+L.trim();
     });
-    return map;
+    return {answers:map, fenced:fenced};
   }
 
   function attachReplies(raw){
-    var map=parseReply(raw);
-    var keep=[], hit=0, first=null;
+    var parsed=parseReply(raw), map=parsed.answers;
+    var notes=pageNotes();
+    var found=notes.filter(function(n,i){ return map[String(i+1)]; }).length;
+    if(!found){ toast("No numbered answers found"); return; }
+    if(!parsed.fenced &&
+       !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
+
+    var keep=[], hit=0;
+    var limit=Math.max(0,TOK.length-1);
     notes.forEach(function(n,i){
       var ans=map[String(i+1)];
       if(ans){
         hit++;
-        var id=makeNode(ans.trim(),curId,{
-          quote:quoteFor(n), note:n.text, s:n.s, e:n.e, para:TOK[n.e].p
+        var at=Math.max(0,Math.min(n.e|0,limit));
+        makeNode(ans.trim(),curId,{
+          quote:quoteFor(n), note:n.text, s:n.s, e:n.e,
+          para:TOK[at]?TOK[at].p:0
         });
-        if(!first) first=id;
       } else keep.push(n);
     });
-    if(!hit){ toast("No numbered answers found"); return; }
-    node().notes=keep; notes=keep;
+    node().notes=keep;
     render(); refresh(); syncNav();
     toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
   }
@@ -1143,6 +1201,7 @@
   }
 
   function buildPrompt(){
+    var notes=pageNotes();
     if(!notes.length) return "";
     var out=mode.head+"\n\n"+contextBlock();
     out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
@@ -1177,32 +1236,40 @@
   /* ---------------- typing a note ---------------- */
   var typeTarget=null;
   function askType(p){
-    typeTarget=p;
+    typeTarget={id:p.id==null?curId:p.id, s:p.s, e:p.e};
     typeQ.textContent="\u201C"+span(p.s,p.e)+"\u201D";
     typeTxt.value="";
     typeEl.classList.add("on");
     overlayAt=Date.now();
     setTimeout(function(){ typeTxt.focus(); },30);
   }
+  /* Both targets have to be cleared together. Leaving treeTarget set after a
+     discarded cross-page note meant the next ordinary note was filed against
+     the map selection instead of the page — invisible until you reopened the
+     map, and it healed itself after one note, so it read as random. */
+  function closeType(){
+    typeEl.classList.remove("on");
+    typeTarget=null; treeTarget=null;
+    clearLive();
+  }
   $("typesave").addEventListener("click",function(){
     var v=typeTxt.value.trim();
+    var tt=typeTarget, tr=treeTarget;
     typeEl.classList.remove("on");
-    if(v&&treeTarget){ addTreeNote(v); }
-    else if(v&&typeTarget){ addNote(typeTarget.s,typeTarget.e,v); }
-    else { clearLive(); treeTarget=null; }
-    typeTarget=null;
+    typeTarget=null; treeTarget=null;
+    if(v&&tr){ treeTarget=tr; addTreeNote(v); treeTarget=null; }
+    else if(v&&tt){ addNote(tt.s,tt.e,v,tt.id); }
+    else clearLive();
   });
   typeTxt.addEventListener("keydown",function(e){
     if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); $("typesave").click(); }
-    if(e.key==="Escape"){ typeEl.classList.remove("on"); typeTarget=null; clearLive(); }
+    if(e.key==="Escape"){ closeType(); }
   });
   typeEl.addEventListener("click",function(e){
     if(Date.now()-overlayAt<450) return;
     if(e.target===typeEl) $("typesave").click();
   });
-  $("typecancel").addEventListener("click",function(){
-    typeEl.classList.remove("on"); typeTarget=null; clearLive();
-  });
+  $("typecancel").addEventListener("click",closeType);
 
   function refresh(){
     refreshCount();
@@ -1227,7 +1294,12 @@
       kill.setAttribute("aria-label","Delete note "+(i+1));
       kill.addEventListener("click",function(){
         if(tree){ treeNotes=treeNotes.filter(function(x){ return x.id!==n.id; }); drawTree(); return; }
-        notes=notes.filter(function(x){ return x.id!==n.id; });
+        /* Splice in place. Reassigning a filtered copy used to leave the page
+           still holding the original array, so the note came back the next time
+           the page was opened. */
+        var live=pageNotes();
+        var at=live.indexOf(n);
+        if(at>=0) live.splice(at,1);
         render(); refresh();
       });
       d.appendChild(num); d.appendChild(body); d.appendChild(kill);
@@ -1235,11 +1307,11 @@
     });
     prevEl.value=inTree()?treePrompt():buildPrompt(); promptDirty=false;
     syncCtx();
+    saveSoon();
   }
 
   function positionCaption(){
-    var r=readerEl.getBoundingClientRect();
-    capEl.style.bottom=(notes.length?"110px":"40px");
+    capEl.style.bottom=(pageNotes().length?"110px":"40px");
   }
 
   /* ---------------- sheet ---------------- */
@@ -1274,18 +1346,27 @@
     return ok;
   }
 
+  /* Modern API first. execCommand is deprecated, steals focus and scrolls the
+     page, so it is only worth reaching for when the real one is unavailable \u2014
+     which on a page served over http:// it still is. */
+  function copyText(txt,okMsg,onManual){
+    function fallback(){
+      if(legacyCopy(txt)){ toast(okMsg); return; }
+      if(onManual) onManual(); else toast("Couldn't copy");
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ toast(okMsg); },fallback);
+    } else fallback();
+  }
+
   function doCopy(){
     var txt=promptDirty?prevEl.value:(inTree()?treePrompt():buildPrompt());
     if(!txt){ toast("No notes yet"); return; }
-    if(legacyCopy(txt)){ toast("Copied"); return; }
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(txt).then(function(){ toast("Copied"); },manual);
-    } else manual();
-    function manual(){
+    copyText(txt,"Copied",function(){
       sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
       prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
       toast("Select all and copy");
-    }
+    });
   }
 
   function openReply(){
@@ -1337,23 +1418,27 @@
 
   /* ---------------- sample tree, for testing navigation ---------------- */
   /* ---------------- thread import / export ---------------- */
-  function exportTree(){
-    return JSON.stringify({
-      meristem:1, caret:1, root:rootId(), cur:curId, seq:seq, nextId:nextId,
+  var FORMAT=1;
+
+  function serialize(){
+    return {
+      meristem:FORMAT, root:rootId(), cur:curId, seq:seq, nextId:nextId,
       nodes:Object.keys(nodes).map(function(id){
         var n=nodes[id];
         return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
                 quote:n.quote,note:n.note,s:n.s,e:n.e,para:n.para,
                 merge:!!n.merge,status:n.status||"open"};
       })
-    },null,1);
+    };
   }
+  function exportTree(){ return JSON.stringify(serialize(),null,1); }
 
-  function importTree(raw){
-    var data;
-    try{ data=JSON.parse(raw); }
-    catch(e){ toast("That isn't valid thread data"); return false; }
-    if(!data||!Array.isArray(data.nodes)||!data.nodes.length){ toast("No pages in that data"); return false; }
+  /* Turn arbitrary parsed JSON into a consistent node map, or null. Anchors are
+     clamped to the page they sit on: a hand-edited or older thread can carry
+     indices past the end of its own text, and an out-of-range anchor used to
+     throw straight through the note list and blank the sheet. */
+  function hydrate(data){
+    if(!data||!Array.isArray(data.nodes)||!data.nodes.length) return null;
 
     var fresh={};
     data.nodes.forEach(function(n){
@@ -1366,26 +1451,103 @@
       };
     });
     var ids=Object.keys(fresh);
-    if(!ids.length){ toast("No usable pages in that data"); return false; }
+    if(!ids.length) return null;
 
     /* rebuild kid links from parents so the two can't disagree */
+    var dropped=0;
     ids.forEach(function(id){
+      var before=fresh[id].parents.length;
       fresh[id].parents=fresh[id].parents.filter(function(pid){ return fresh[pid]; });
+      dropped+=before-fresh[id].parents.length;
       fresh[id].parents.forEach(function(pid){ fresh[pid].kids.push(id); });
       fresh[id].merge=fresh[id].parents.length>1;
     });
 
-    var roots=ids.filter(function(id){ return !fresh[id].parents.length; });
-    if(!roots.length){ toast("That thread has no starting page"); return false; }
-
-    nodes=fresh;
-    seq=Math.max(data.seq|0, ids.length);
-    nextId=Math.max(data.nextId|0, 1);
     ids.forEach(function(id){
-      fresh[id].notes.forEach(function(nt){ nextId=Math.max(nextId,(nt.id|0)+1); });
+      var last=Math.max(0,tokensOf(fresh[id].text).length-1);
+      fresh[id].notes=fresh[id].notes.filter(function(nt){
+        return nt && typeof nt.text==="string";
+      }).map(function(nt){
+        var s=Math.max(0,Math.min(nt.s|0,last));
+        var e=Math.max(s,Math.min(nt.e|0,last));
+        return {id:nt.id|0, s:s, e:e, text:nt.text};
+      });
     });
-    focusNode(fresh[data.cur]?data.cur:roots[0]);
-    toast(ids.length+" page"+(ids.length>1?"s":"")+" loaded");
+
+    var roots=ids.filter(function(id){ return !fresh[id].parents.length; });
+    if(!roots.length) return null;
+
+    var next=Math.max(data.nextId|0,1);
+    ids.forEach(function(id){
+      fresh[id].notes.forEach(function(nt){ next=Math.max(next,(nt.id|0)+1); });
+    });
+
+    return {
+      map:fresh, ids:ids, roots:roots, dropped:dropped,
+      seq:Math.max(data.seq|0, ids.length), nextId:next,
+      cur:fresh[data.cur]?data.cur:roots[0]
+    };
+  }
+
+  function adopt(h){
+    nodes=h.map; seq=h.seq; nextId=h.nextId;
+    treeNotes=[]; picked=[]; collapsed={}; expanded={};
+    focusNode(h.cur);
+  }
+
+  function importTree(raw){
+    var data;
+    try{ data=JSON.parse(raw); }
+    catch(e){ toast("That isn't valid thread data"); return false; }
+    if(!data||!Array.isArray(data.nodes)||!data.nodes.length){ toast("No pages in that data"); return false; }
+
+    var h=hydrate(data);
+    if(!h){ toast("No usable pages in that data"); return false; }
+    adopt(h);
+    toast(h.ids.length+" page"+(h.ids.length>1?"s":"")+" loaded"+
+          (h.dropped?" ("+h.dropped+" broken link"+(h.dropped>1?"s":"")+" dropped)":""));
+    return true;
+  }
+
+  /* ---------------- autosave ----------------
+     The whole point of this app is a thread that accumulates over several
+     rounds, so losing it to a refresh was the worst thing it did. Written on a
+     short debounce after any change; restored on load. */
+  var SAVE_KEY="meristem.thread.v1";
+  var saveTimer=null, saveBroken=false;
+
+  function storage(){
+    try{ return window.localStorage; }catch(e){ return null; }
+  }
+  function save(){
+    var store=storage();
+    if(!store||saveBroken||!curId||!Object.keys(nodes).length) return;
+    try{ store.setItem(SAVE_KEY,JSON.stringify(serialize())); }
+    catch(e){
+      /* Quota, or private mode on some browsers. Say it once and stop trying. */
+      saveBroken=true;
+      toast("Couldn't autosave — export to keep this thread");
+    }
+  }
+  function saveSoon(){
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer=setTimeout(function(){ saveTimer=null; save(); },400);
+  }
+  function clearSaved(){
+    var store=storage();
+    if(!store) return;
+    try{ store.removeItem(SAVE_KEY); }catch(e){}
+  }
+  function restore(){
+    var store=storage();
+    if(!store) return false;
+    var raw;
+    try{ raw=store.getItem(SAVE_KEY); }catch(e){ return false; }
+    if(!raw) return false;
+    var h;
+    try{ h=hydrate(JSON.parse(raw)); }catch(e){ h=null; }
+    if(!h){ clearSaved(); return false; }
+    adopt(h);
     return true;
   }
 
@@ -1463,11 +1625,27 @@
     if(e.target===$("importin")) $("importin").classList.remove("on");
   });
 
+  /* Import already takes a dropped file, so export should produce one. Falls
+     back to the clipboard where downloads aren't available. */
+  function exportName(){
+    var d=new Date(), p=function(v){ return (v<10?"0":"")+v; };
+    return "meristem-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+
+           "-"+p(d.getHours())+p(d.getMinutes())+".json";
+  }
   $("exportbtn").addEventListener("click",function(){
     var txt=exportTree();
-    if(legacyCopy(txt)) toast("Thread copied");
-    else if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast("Thread copied"); });
-    else toast("Couldn't copy");
+    var url=null;
+    try{
+      var a=document.createElement("a");
+      if(typeof a.download!=="string" || !window.URL || !URL.createObjectURL) throw 0;
+      url=URL.createObjectURL(new Blob([txt],{type:"application/json"}));
+      a.href=url; a.download=exportName();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      toast("Thread saved");
+    }catch(e){
+      copyText(txt,"Thread copied");
+    }
+    if(url) setTimeout(function(){ URL.revokeObjectURL(url); },4000);
   });
 
   function tokensOf(text){
@@ -1559,10 +1737,32 @@
     $("scroller").scrollTop=keep;
   }
 
+  /* Count everything that would go: the replies hanging off this page, plus
+     anything hanging off those, since orphans get dropped too. */
+  function descendantsOf(id,seen){
+    seen=seen||{};
+    var out=[];
+    (nodes[id]?nodes[id].kids:[]).forEach(function(k){
+      if(seen[k]||!nodes[k]) return;
+      seen[k]=true;
+      out.push(k);
+      out=out.concat(descendantsOf(k,seen));
+    });
+    return out;
+  }
+
   $("edit").addEventListener("click",function(){
     var n=node();
-    if(n&&(n.notes.length||n.kids.length)) toast("Editing clears this page's notes and replies");
     if(n){
+      var kids=descendantsOf(n.id).length, mine=n.notes.length;
+      if(kids||mine){
+        var what=[];
+        if(mine) what.push(mine+" note"+(mine>1?"s":""));
+        if(kids) what.push(kids+" repl"+(kids>1?"ies":"y"));
+        /* This used to delete first and toast afterwards, with no way back. */
+        if(!confirm("Editing this text will delete "+what.join(" and ")+
+                    " on this page.\n\nThis cannot be undone. Continue?")) return;
+      }
       n.kids.forEach(function(k){
         if(nodes[k]){
           nodes[k].parents=nodes[k].parents.filter(function(x){ return x!==n.id; });
@@ -1571,7 +1771,6 @@
       });
       n.kids=[]; n.notes=[];
     }
-    notes=n?n.notes:[];
     render(); refresh(); syncNav();
     toEditor();
   });
@@ -1582,9 +1781,7 @@
   var readMode=false, collapsed={};
   var picked=[], treeNotes=[], treeTarget=null, treeReplyMode=false, selectMode=false;
   function inTree(){ return !$("treeview").hidden; }
-  function activeNotes(){ return inTree()?treeNotes:notes; }
-  function inTree(){ return !$("treeview").hidden; }
-  function activeNotes(){ return inTree()?treeNotes:notes; }
+  function activeNotes(){ return inTree()?treeNotes:pageNotes(); }
   var LAYER=300, SPREAD=230;
   var expanded={};   // pages the reader has opened out in place
   /* full-text cards are far bigger, so the whole scene has to open up */
@@ -1829,18 +2026,50 @@
           }
         });
 
+        /* Bounds at the zoom we actually settled on. Perspective shifts with
+           zoom, so the span measured at 1 is not the span you get. */
+        var bx0=Infinity,bx1=-Infinity,by0=Infinity,by1=-Infinity;
+        ids.forEach(function(id){
+          var C=box[id];
+          if(C.x-C.w<bx0) bx0=C.x-C.w;
+          if(C.x+C.w>bx1) bx1=C.x+C.w;
+          if(C.y-C.h<by0) by0=C.y-C.h;
+          if(C.y+C.h>by1) by1=C.y+C.h;
+        });
+        var realW=Math.max(1,bx1-bx0), realH=Math.max(1,by1-by0);
+        var shrink=Math.min(1, Math.min(vw/realW, vh/realH));
+        if(shrink<1){
+          zoom=Math.max(.12,zoom*shrink);
+          bx0*=shrink; bx1*=shrink; by0*=shrink; by1*=shrink;
+        }
+
         var score=overlaps*120 + crossings*8 - zoom*14;
-        if(!best || score<best.score) best={yaw:yaw,pitch:pitch,zoom:zoom,score:score,overlaps:overlaps,crossings:crossings};
+        if(!best || score<best.score) best={
+          yaw:yaw, pitch:pitch, zoom:zoom, score:score,
+          overlaps:overlaps, crossings:crossings,
+          cx:(bx0+bx1)/2, cy:(by0+by1)/2
+        };
       });
     });
     return best;
   }
 
+  /* The scene's origin, from .scene{left:50%;top:45%} in the stylesheet. Fit
+     has to know it: projected coordinates are measured from the origin, not
+     from the middle of the viewport. Keep the two in step. */
+  var SCENE_ORIGIN_X=0.50, SCENE_ORIGIN_Y=0.45;
+
   function fitAll(){
     var b=bestView();
     if(!b) return;
     view.yaw=b.yaw; view.pitch=b.pitch; view.zoom=b.zoom;
-    view.panX=0; view.panY=0;
+    /* Zoom alone never fitted anything: the camera stayed pinned to the selected
+       page, so unless the content happened to be centred on it the map hung off
+       an edge. Slide the content's own middle to the middle of the viewport. */
+    var body=$("treebody");
+    var W=body.clientWidth||960, H=body.clientHeight||620;
+    view.panX=(0.5-SCENE_ORIGIN_X)*W - b.cx;
+    view.panY=(0.5-SCENE_ORIGIN_Y)*H - b.cy;
   }
 
   function cardHTML(id){
@@ -2013,13 +2242,17 @@
   }
 
   function attachTreeReplies(raw){
-    var map=parseReply(raw), keep=[], hit=0;
+    var parsed=parseReply(raw), map=parsed.answers, keep=[], hit=0;
+    var found=treeNotes.filter(function(n,i){ return map[String(i+1)]; }).length;
+    if(!found){ toast("No numbered answers found"); return; }
+    if(!parsed.fenced &&
+       !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
     treeNotes.forEach(function(n,i){
       var ans=map[String(i+1)];
       if(ans){ hit++; makeNode(ans.trim(), n.ids, {note:n.text, quote:""}); }
       else keep.push(n);
     });
-    if(!hit){ toast("No numbered answers found"); return; }
     treeNotes=keep; picked=[];
     drawTree();
     toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
@@ -2288,15 +2521,20 @@
     $("scroller").classList.toggle("scrolled",$("scroller").scrollTop>6);
   });
 
-  syncMode();
-  toEditor();
   $("reset").addEventListener("click",function(){
+    var pages=Object.keys(nodes).length;
+    if(pages && !confirm("Start over?\n\nThis discards "+pages+" page"+(pages>1?"s":"")+
+                         " and everything on them. Export first if you want to keep it.")) return;
     nodes={}; curId=null; seq=0;
-    notes=[]; words=[]; TOK=[];
+    words=[]; TOK=[]; treeNotes=[]; picked=[]; collapsed={}; expanded={};
     readerEl.innerHTML="";
+    clearSaved();
     refresh(); syncNav();
     toEditor();
   });
+
+  syncMode();
+  if(!restore()) toEditor();
 })();
 </script>
 </body>
