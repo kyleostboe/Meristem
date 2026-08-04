@@ -73,7 +73,10 @@ const FAKE_SPEECH = () => {
 };
 
 async function newPage({ confirm = true } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 900, height: 1000 },
+    acceptDownloads: true,
+  });
   await ctx.addInitScript(FAKE_SPEECH);
   await ctx.addInitScript(`window.confirm = () => ${confirm};`);
   const page = await ctx.newPage();
@@ -236,23 +239,22 @@ console.log('\nthe thread survives a reload');
 
 console.log('\nreply parsing');
 {
-  const page = await newPage();
+  // A fresh context per case — clearing storage in place no longer works now
+  // that the app flushes a pending save on pagehide, which a reload triggers.
   for (const [label, body, expected] of [
     ['arrow',       '[[notes]]\n1 → answer one\n2 → answer two\n[[/notes]]', 2],
     ['1. period',   '[[notes]]\n1. answer one\n2. answer two\n[[/notes]]',             2],
     ['1) paren',    '[[notes]]\n1) answer one\n2) answer two\n[[/notes]]',             2],
     ['hyphen',      '[[notes]]\n1 - answer one\n2 - answer two\n[[/notes]]',           2],
   ]) {
-    await page.goto(URL_); await page.waitForTimeout(200);
-    await page.evaluate(() => localStorage.clear());
-    await page.goto(URL_); await page.waitForTimeout(200);
+    const page = await newPage();
     await page.click('#sample'); await page.waitForTimeout(300);
     await type(page, 1, 'note one');
     await type(page, 30, 'note two');
     await reply(page, body);
     eq(`"${label}" is understood`, await page.locator('.rnode').count(), expected);
+    await page.close_();
   }
-  await page.close_();
 }
 
 console.log('\nunfenced prose is not mistaken for answers');
@@ -282,7 +284,7 @@ console.log('\nthe prompt carries the text as written');
 {
   // Typed in: line breaks inside a paragraph used to be flattened to spaces,
   // because the prompt was rebuilt by re-joining the token array.
-  const page = await newPage();
+  let page = await newPage();
   const formatted = 'Intro line.\n\n- bullet one\n- bullet two\n\nEnd.';
   await page.evaluate(t => {
     document.getElementById('reader').innerHTML =
@@ -294,8 +296,10 @@ console.log('\nthe prompt carries the text as written');
   check('a list stays a list', /- bullet one\n- bullet two/.test(prompt), prompt.slice(0, 240));
 
   // Imported: the page text is taken verbatim, so indentation survives too.
-  await page.evaluate(() => localStorage.clear());
-  await page.goto(URL_); await page.waitForTimeout(200);
+  // Fresh context rather than clearing in place — a reload flushes any pending
+  // save, which would put the thread straight back.
+  await page.close_();
+  page = await newPage();
   await page.click('#importbtn'); await page.waitForTimeout(150);
   await page.fill('#importtxt', JSON.stringify({
     nodes: [{ id: 'r', parents: [], text: 'Intro line.\n\n    indented code();\n\nEnd.',
@@ -452,6 +456,171 @@ console.log('\nthe scope switch narrows to one page');
 
   await page.click('#scopebar'); await page.waitForTimeout(400);
   eq('and back again', await sheet(page), ['ROOT B', 'CHILD C']);
+  await page.close_();
+}
+
+console.log('\na note about the page as a whole');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'an ordinary note');
+
+  await page.click('#pagenote'); await page.waitForTimeout(400);
+  check('the card says what it is',
+    (await page.locator('#typeq').textContent()).includes('as a whole'));
+  await page.fill('#typetxt', 'this page is too hedged');
+  await page.click('#typesave'); await page.waitForTimeout(300);
+
+  eq('it joins the basket', await sheet(page), ['this page is too hedged', 'an ordinary note']);
+  eq('and takes a number', await page.locator('#count').textContent(), '2');
+  // it marks no words, so only the anchored note gets a superscript
+  eq('it puts no superscript in the text',
+     await page.$$eval('#reader sup.mk:not(.ans)', ns => ns.map(n => n.textContent)), ['2']);
+
+  const prompt = await page.locator('#preview').inputValue();
+  check('the prompt says it is about the whole page',
+    /\[1\] about this page as a whole/.test(prompt), prompt.slice(0, 300));
+
+  // its reply hangs off the page it was about
+  await reply(page, '[[notes]]\n1 → the page is indeed hedged\n[[/notes]]');
+  const s = await state(page);
+  const root = s.nodes.find(n => !n.parents.length);
+  const child = s.nodes.find(n => n.note === 'this page is too hedged');
+  eq('the reply hangs off that page', child.parents, [root.id]);
+  eq('and is marked as answering the whole page', child.whole, true);
+  eq('no exceptions', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nstanding instructions are not questions');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a real note');
+
+  await page.click('#alwaysnote'); await page.waitForTimeout(400);
+  await page.fill('#typetxt', 'Answer in British English');
+  await page.click('#typesave'); await page.waitForTimeout(300);
+
+  eq('it does not take a note number',
+     await page.locator('#count').textContent(), '1');
+  check('it is listed separately',
+    await page.locator('.alwayshead').isVisible());
+
+  const prompt = await page.locator('#preview').inputValue();
+  check('it reaches the model as a standing instruction',
+    /Throughout, whichever note you are answering:\n- Answer in British English/.test(prompt),
+    prompt.slice(-400));
+  check('and is not numbered', !/\[\d+\].*British English/.test(prompt));
+
+  // a reply consumes the note but must leave the instruction alone
+  await reply(page, '[[notes]]\n1 → answered\n[[/notes]]');
+  eq('a reply does not consume it', await sheet(page), ['Answer in British English']);
+
+  await page.reload(); await page.waitForTimeout(700);
+  eq('it survives a reload', await sheet(page), ['Answer in British English']);
+  await page.close_();
+}
+
+console.log('\na note can carry its own intent');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'note one');
+  await type(page, 30, 'note two');
+  await page.click('#grab'); await page.waitForTimeout(300);
+
+  let prompt = await page.locator('#preview').inputValue();
+  check('untagged notes carry no intent tag', !/ — rewrite/.test(prompt));
+
+  await page.locator('.note .intent').first().click();   // -> Rewrite
+  await page.waitForTimeout(300);
+  prompt = await page.locator('#preview').inputValue();
+  check('the tagged note says so', /\[1\].* — rewrite/.test(prompt), prompt.slice(0, 400));
+  check('and the intent is explained once', /Some notes carry their own intent/.test(prompt));
+  check('the other note is untouched', !/\[2\].* — /.test(prompt));
+
+  // reloaded immediately, inside the autosave debounce — the pagehide flush
+  // is what has to carry this
+  await page.reload(); await page.waitForTimeout(700);
+  prompt = await page.locator('#preview').inputValue();
+  check('the intent survives a reload', /\[1\].* — rewrite/.test(prompt));
+  await page.close_();
+}
+
+console.log('\nwidening an anchor to a sentence or paragraph');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+
+  await page.locator('.w[data-i="6"]').click(); await page.waitForTimeout(300);
+  const word = await page.locator('#typeq').textContent();
+  await page.locator('.scopebtn', { hasText: 'Sentence' }).click(); await page.waitForTimeout(200);
+  const sentence = await page.locator('#typeq').textContent();
+  await page.locator('.scopebtn', { hasText: 'Paragraph' }).click(); await page.waitForTimeout(200);
+  const para = await page.locator('#typeq').textContent();
+
+  check('a sentence is wider than a word', sentence.length > word.length, `${word} -> ${sentence}`);
+  check('the sentence stops at the full stop',
+    /^“The bottleneck.*interface\.”$/.test(sentence), sentence);
+  check('a paragraph is wider than a sentence', para.length > sentence.length);
+  check('the paragraph does not run past its own paragraph',
+    !para.includes('What replaced it'), para.slice(-80));
+
+  await page.locator('.scopebtn', { hasText: 'Sentence' }).click(); await page.waitForTimeout(200);
+  await page.fill('#typetxt', 'a sentence note');
+  await page.click('#typesave'); await page.waitForTimeout(300);
+  const q = await page.locator('.note .quote').first().textContent();
+  check('the saved note keeps the widened anchor', /interface\.”$/.test(q), q);
+
+  // and it can be adjusted afterwards from the sheet
+  await page.click('#grab'); await page.waitForTimeout(300);
+  await page.locator('.note .quote').first().click(); await page.waitForTimeout(250);
+  check('the sheet offers the same control',
+    await page.locator('.note .scoperow').isVisible());
+  await page.locator('.note .scopebtn', { hasText: 'Word' }).click(); await page.waitForTimeout(300);
+  const narrowed = await page.locator('.note .quote').first().textContent();
+  check('narrowing back to a word works', narrowed.length < q.length, `${q} -> ${narrowed}`);
+  await page.close_();
+}
+
+console.log('\nreadable export');
+{
+  const page = await newPage();
+  await page.click('#sampletree'); await page.waitForTimeout(500);
+  await page.click('#alwaysnote'); await page.waitForTimeout(400);
+  await page.fill('#typetxt', 'Be terse'); await page.click('#typesave'); await page.waitForTimeout(300);
+
+  const dl = page.waitForEvent('download');
+  await page.click('#exportbtn'); await page.waitForTimeout(300);
+  await page.click('#exportmd');
+  const file = await dl;
+  const md = (await (await import('node:fs/promises')).readFile(await file.path())).toString();
+
+  check('it is markdown', md.startsWith('# Meristem thread'), md.slice(0, 60));
+  check('the filename is .md', file.suggestedFilename().endsWith('.md'), file.suggestedFilename());
+  check('the original text is in it', md.includes('The bottleneck'));
+  check('replies become headings', /^### /m.test(md), md.slice(0, 600));
+  check('nesting deepens with the thread', /^#### /m.test(md));
+  check('anchors appear as quotes', /^> /m.test(md));
+  check('standing instructions are carried', md.includes('**Standing instructions:** Be terse'));
+  check('open notes are listed', md.includes('**Still open:**'));
+  await page.close_();
+}
+
+console.log('\nthe prompt size is shown before you paste it');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a note');
+  await page.click('#grab'); await page.waitForTimeout(300);
+
+  const label = await page.locator('#psize').textContent();
+  check('it reads in words', /^~[\d.]+k? words$/.test(label), label);
+  const shown = parseFloat(label.replace(/[^\d.]/g, '')) * (label.includes('k') ? 1000 : 1);
+  const actual = (await page.locator('#preview').inputValue()).trim().split(/\s+/).length;
+  check('and it matches the real prompt',
+    Math.abs(shown - actual) / actual < 0.05, `showed ${shown}, actual ${actual}`);
   await page.close_();
 }
 
