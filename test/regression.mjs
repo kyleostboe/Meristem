@@ -32,12 +32,25 @@ function eq(name, actual, expected) {
 
 /* ---------- harness ---------- */
 
+const TYPES = {
+  '.html': 'text/html',
+  '.json': 'application/json',
+  '.js': 'text/javascript',
+  '.svg': 'image/svg+xml',
+};
+
 const server = createServer(async (req, res) => {
+  // Strip the query string — a share arrives as ./?text=… and must still
+  // resolve to the page.
+  let name = decodeURIComponent(req.url.split('?')[0]);
+  if (name === '/' || name === '') name = '/index.html';
+  if (name.includes('..')) { res.writeHead(400); res.end(); return; }
+  const ext = name.slice(name.lastIndexOf('.'));
   try {
-    const body = await readFile(join(ROOT, 'index.html'));
-    res.writeHead(200, { 'Content-Type': 'text/html' });
+    const body = await readFile(join(ROOT, name.slice(1)));
+    res.writeHead(200, { 'Content-Type': TYPES[ext] || 'application/octet-stream' });
     res.end(body);
-  } catch { res.writeHead(500); res.end(); }
+  } catch { res.writeHead(404); res.end(); }
 });
 await new Promise(r => server.listen(0, r));
 const URL_ = `http://127.0.0.1:${server.address().port}/`;
@@ -621,6 +634,51 @@ console.log('\nthe prompt size is shown before you paste it');
   const actual = (await page.locator('#preview').inputValue()).trim().split(/\s+/).length;
   check('and it matches the real prompt',
     Math.abs(shown - actual) / actual < 0.05, `showed ${shown}, actual ${actual}`);
+  await page.close_();
+}
+
+console.log('\nshared text opens in the reader');
+{
+  const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+  await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(`window.confirm = () => true;`);
+  const page = await ctx.newPage();
+  page.errors = [];
+  page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
+
+  const shared = encodeURIComponent('A shared paragraph of prose.\n\nAnd a second one.');
+  await page.goto(`${URL_}?title=${encodeURIComponent('An Article')}&text=${shared}&url=${encodeURIComponent('https://example.com/a')}`);
+  await page.waitForTimeout(600);
+
+  const text = await page.locator('#reader').innerText();
+  check('the shared text is loaded', text.includes('A shared paragraph of prose'), text.slice(0, 120));
+  check('the title comes with it', text.includes('An Article'));
+  check('the source url comes with it', text.includes('https://example.com/a'));
+  check('it is annotatable straight away', (await page.locator('.w').count()) > 0);
+  eq('the query string is cleared so a refresh does not re-import',
+     await page.evaluate(() => location.search), '');
+  eq('no exceptions', page.errors, []);
+  await ctx.close();
+}
+
+console.log('\nthe manifest and worker are wired up');
+{
+  const page = await newPage();
+  eq('the manifest is linked',
+     await page.getAttribute('link[rel=manifest]', 'href'), './manifest.json');
+
+  const res = await page.request.get(`${URL_}manifest.json`);
+  const mf = await res.json();
+  eq('it registers as a share target', mf.share_target.method, 'GET');
+  eq('sharing lands on the app itself', mf.share_target.action, './');
+  eq('and carries the text', mf.share_target.params.text, 'text');
+  check('it is installable (name, icons, display)',
+    !!mf.name && mf.icons.length > 0 && mf.display === 'standalone');
+
+  const sw = await (await page.request.get(`${URL_}sw.js`)).text();
+  check('the worker is network-first for the page',
+    /req\.mode === 'navigate'[\s\S]*fetch\(req\)[\s\S]*\.catch\(\(\) => caches\.match/.test(sw),
+    'navigation handler should try the network before the cache');
   await page.close_();
 }
 

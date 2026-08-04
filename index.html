@@ -9,6 +9,10 @@
 <meta name="theme-color" content="#E9ECF2" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12171F" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#127793;</text></svg>">
+<!-- Installability, and with it a place in the Android share sheet. Both the
+     manifest and the worker are progressive enhancement: index.html on its own
+     is still the whole app, including from file://. -->
+<link rel="manifest" href="./manifest.json">
 <title>Meristem — talk in the text</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3407,9 +3411,68 @@
     toEditor();
   });
 
+  /* ---------------- shared text ----------------
+     On Android the app registers as a share target, so "Share → Meristem" from
+     a browser or reader arrives here as an ordinary GET with the text in the
+     query string. iOS has no Web Share Target, but a Shortcut that opens
+     ?text=… lands in exactly the same place, so both routes are one code path. */
+  function sharedText(){
+    var q=location.search;
+    if(!q||q.length<2) return null;
+    var p={};
+    q.slice(1).split("&").forEach(function(kv){
+      var i=kv.indexOf("=");
+      if(i<0) return;
+      try{
+        p[decodeURIComponent(kv.slice(0,i))]=
+          decodeURIComponent(kv.slice(i+1).replace(/\+/g," "));
+      }catch(e){}
+    });
+    var parts=[];
+    if(p.title) parts.push(p.title);
+    if(p.text) parts.push(p.text);
+    /* Many apps share a bare URL as `text`; don't print it twice. */
+    if(p.url && (!p.text || p.text.indexOf(p.url)<0)) parts.push(p.url);
+    var t=parts.join("\n\n").trim();
+    return t||null;
+  }
+
+  function dropQuery(){
+    if(!window.history||!history.replaceState) return;
+    try{ history.replaceState(null,"",location.pathname+location.hash); }catch(e){}
+  }
+
+  function start(){
+    var shared=sharedText();
+    if(!shared){
+      if(!restore()) toEditor();
+      return;
+    }
+    /* A share must never quietly overwrite work in progress. */
+    dropQuery();
+    var saved=storage()&&(function(){
+      try{ return storage().getItem(SAVE_KEY); }catch(e){ return null; }
+    })();
+    if(saved && !confirm("Open the shared text?\n\nThis replaces the thread you have open. "+
+                         "Cancel to keep working on that instead.")){
+      if(!restore()) toEditor();
+      return;
+    }
+    load(shared);
+    toast("Shared text opened");
+  }
+
   loadScope();
   syncMode();
-  if(!restore()) toEditor();
+  start();
+
+  /* Registered last, and only over http(s) — from file:// there is no worker
+     and the app simply carries on without one. */
+  if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+    window.addEventListener("load",function(){
+      navigator.serviceWorker.register("./sw.js").catch(function(){});
+    });
+  }
 })();
 </script>
 </body>
