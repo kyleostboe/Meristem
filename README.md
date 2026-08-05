@@ -51,6 +51,26 @@ Each note can carry its own intent, so one round can ask for a rewrite here and
 an argument there. Tap the small label under a note to change it; untagged notes
 follow the mode set for the sheet.
 
+### Comparing models
+
+The prompt is portable text, so the same one can go to several models. Turn on
+`Compare` and a pasted reply attaches its answers to your notes instead of
+spending them — each tagged with who wrote it, sitting side by side under the
+note they answer. `Keep` promotes one to a page; the rest stay while you weigh
+them. Keep two and you get two branches off the same words.
+
+With `Compare` off, a reply goes straight to pages as before.
+
+### Starting from a blank document
+
+`Suggest` asks a model which passages are worth interrogating and returns them
+as ordinary unanswered notes, anchored to the words they quote and marked
+*suggested*. They are proposals: delete the generic ones, sharpen the rest, add
+your own, and only then ask for answers. Editing one makes it yours.
+
+Both directions go through the same `Paste reply` box — a `[[suggest]]` block
+becomes notes, a `[[notes]]` block becomes answers.
+
 `All pages` in the sheet narrows to `This page` when you want to work on one
 text in isolation.
 

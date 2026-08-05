@@ -520,6 +520,56 @@
   .scopebtn:hover{border-color:var(--ink);color:var(--ink)}
   .scopebtn.on{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:700}
 
+  .note .fromai{
+    display:inline-block;margin-top:5px;margin-right:8px;
+    font-family:"Newsreader",Georgia,serif;font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);opacity:.75;
+  }
+
+  /* ---------- answers waiting to be compared ---------- */
+  #comparebar.on{color:var(--mark);font-weight:700}
+  .answers{margin:8px 0 2px;border-left:2px solid var(--rule);padding-left:11px}
+  .ans{display:flex;gap:9px;align-items:flex-start;padding:6px 0}
+  .ans + .ans{border-top:1px dotted var(--rule)}
+  .ans .who{
+    flex:0 0 auto;min-width:52px;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;font-weight:700;
+    color:var(--mark);padding-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:88px;
+  }
+  .ans .what{
+    flex:1;min-width:0;
+    font-family:"Newsreader",Georgia,serif;font-size:12.5px;line-height:1.55;
+    color:var(--ink);white-space:pre-wrap;word-break:break-word;
+  }
+  .ans .acts{flex:0 0 auto;display:flex;gap:4px;align-items:center}
+  .ans .keep{
+    padding:2px 8px;border:1px solid var(--mark);border-radius:var(--pill);
+    background:none;color:var(--mark);cursor:pointer;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;font-weight:700;
+  }
+  .ans .keep:hover{background:var(--mark);color:var(--on-mark)}
+  .ans .toss{
+    background:none;border:0;padding:0 3px;cursor:pointer;
+    color:var(--muted);font-size:14px;line-height:1;
+  }
+  .ans .toss:hover{color:var(--mark)}
+
+  /* which model wrote a page */
+  .rmeta .src,.tnode .tsrc{color:var(--mark);font-weight:700}
+
+  .srcrow{display:flex;align-items:center;gap:9px;margin:0 0 10px}
+  .srcrow label{
+    font-family:"Newsreader",Georgia,serif;font-size:12px;color:var(--muted);flex:0 0 auto;
+  }
+  .srcrow input{
+    flex:1;min-width:0;padding:7px 10px;
+    border:1px solid var(--rule);border-radius:var(--r-s);
+    background:var(--paper);color:var(--ink);
+    font-family:"Newsreader",Georgia,serif;font-size:13px;
+  }
+  .srcrow input:focus{outline:none;border-color:var(--ink)}
+
   /* how much you are about to paste somewhere */
   .psize{
     font-family:"Newsreader",Georgia,serif;font-size:11.5px;color:var(--muted);
@@ -637,8 +687,10 @@
       <button class="mini" id="pagenote" title="A note about this page as a whole">&#43; Page</button>
       <button class="mini" id="alwaysnote" title="An instruction to follow throughout">&#43; Always</button>
       <button class="mini" id="scopebar">All pages</button>
+      <button class="mini" id="comparebar">Compare</button>
       <button class="mini" id="ctxbar">Context: path</button>
       <button class="mini solid" id="copybar">Copy prompt</button>
+      <button class="mini" id="suggestbar" title="Ask a model which passages are worth interrogating">Suggest</button>
       <button class="mini" id="peekbar">Preview</button>
       <button class="mini" id="replybar">Paste reply</button>
       <span class="psize" id="psize" hidden></span>
@@ -668,6 +720,10 @@
 <div class="typein" id="replyin" role="dialog" aria-modal="true" aria-labelledby="replyq">
   <div class="card">
     <p class="q" id="replyq">Paste the whole reply. Only the notes block gets read.</p>
+    <p class="srcrow" id="srcrow" hidden>
+      <label for="replysrc">Who answered?</label>
+      <input id="replysrc" type="text" placeholder="Claude, GPT-5, Gemini&#8230;" autocomplete="off">
+    </p>
     <textarea id="replytxt" placeholder="Paste the AI's response here…"></textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn" id="replysave">Attach replies</button>
@@ -814,7 +870,7 @@
       notes:[], kids:[],
       quote:(meta&&meta.quote)||"", note:(meta&&meta.note)||"",
       s:(meta?meta.s:0), e:(meta?meta.e:0), para:(meta?meta.para:0),
-      whole:!!(meta&&meta.whole),
+      whole:!!(meta&&meta.whole), source:(meta&&meta.source)||"",
       merge:ps.length>1, status:"open"
     };
     ps.forEach(function(pid){ if(nodes[pid]) nodes[pid].kids.push(id); });
@@ -1042,6 +1098,7 @@
       if(!m) return "";
       var hid=collapsed[id]?" hid":"";
       var meta=[];
+      if(m.source) meta.push(m.source);
       if(m.parents.length>1) meta.push("answers a note across "+m.parents.length+" pages");
       if(m.status!=="open") meta.push(m.status);
       if(m.notes.length) meta.push(m.notes.length+" note"+(m.notes.length>1?"s":"")+" with no reply yet");
@@ -1461,6 +1518,126 @@
      Reports whether the [[notes]] fence was present: without it we are reading
      the whole message and any incidental numbered list looks like an answer,
      so the caller confirms before acting. */
+  /* ---------------- suggested notes ----------------
+     A blank 40-page document is the hardest place to start: you know something
+     is wrong with it but not where to put your finger. So the model can be
+     asked for an agenda instead of an answer — a set of passages worth
+     interrogating, which arrive as ordinary unanswered notes.
+
+     They are proposals, not conclusions. You delete the generic ones, sharpen
+     the rest, add your own, and only then ask for answers. The model suggests
+     what to argue about; you decide what is worth arguing about.
+
+     This goes out and comes back as text like everything else, so it works
+     with any model today and an API only ever replaces the transport. */
+  var SUGGEST_HEAD=
+    "Below is a piece of text I'm about to work through. Before I do, mark the "+
+    "passages worth interrogating.";
+
+  var SUGGEST_TAIL=
+    "Pick the places where the argument actually turns: a claim doing more work "+
+    "than its evidence supports, a term used two ways, a step that doesn't "+
+    "follow, an objection the text never meets, a hedge covering a gap. Skip "+
+    "anything a careful reader would already grant, and skip generic advice — "+
+    "\"needs more evidence\" and \"consider the counterargument\" are not notes, "+
+    "they are noise. Fewer and sharper beats more and safer.\n\n"+
+    "Write each one as the note I would have written myself: first person, "+
+    "one or two sentences, addressed to the author. A question where you want "+
+    "an answer, a flat statement where you think it's wrong.";
+
+  var SUGGEST_BLOCK=
+    "\n\nEnd your message with a block in exactly this format, so my app can "+
+    "attach each note to the words it is about:\n\n"+
+    "[[suggest]]\n"+
+    "\"the exact words from the text, copied verbatim\" → the note\n"+
+    "\"another exact quote\" → another note\n"+
+    "[[/suggest]]\n\n"+
+    "Each quote must appear in the text word for word, and be long enough to "+
+    "occur only once — a short sentence or a distinctive clause. Keep each note "+
+    "on one line. Write whatever you like above the block.";
+
+  function suggestPrompt(count){
+    var n=node();
+    if(!n) return "";
+    return SUGGEST_HEAD+"\n\n"+
+           "--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n"+
+           "Give me at most "+(count||10)+" notes.\n\n"+
+           SUGGEST_TAIL+standingBlock()+SUGGEST_BLOCK;
+  }
+
+  function parseSuggestions(raw){
+    var m=raw.match(/\[\[suggest\]\]([\s\S]*?)(?:\[\[\/suggest\]\]|$)/i);
+    if(!m) return null;
+    var out=[];
+    m[1].split(/\n/).forEach(function(L){
+      /* "quote" → note, tolerating the quote styles models actually emit. */
+      var hit=L.match(/^\s*[-*]?\s*["“'']([\s\S]+?)["”'']\s*(?:→|->|=>|:|—|\|)\s*(.+?)\s*$/);
+      if(!hit) return;
+      var quote=hit[1].trim(), note=hit[2].trim();
+      if(quote&&note) out.push({quote:quote,note:note});
+    });
+    return out;
+  }
+
+  /* Find where a quoted phrase sits in a page's tokens. Models paraphrase
+     punctuation and casing even when told not to, so compare on letters and
+     digits alone, and fall back to the longest run that does match rather than
+     dropping the note entirely. */
+  function normTok(t){ return (t||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
+
+  function findPhrase(toks,quote){
+    var want=quote.split(/\s+/).map(normTok).filter(Boolean);
+    if(!want.length||!toks.length) return null;
+    var have=toks.map(function(t){ return normTok(t.t); });
+
+    function runAt(i,seq){
+      for(var k=0;k<seq.length;k++) if(have[i+k]!==seq[k]) return false;
+      return true;
+    }
+    for(var i=0;i+want.length<=have.length;i++){
+      if(runAt(i,want)) return {s:i,e:i+want.length-1};
+    }
+    /* No exact run. Take the longest prefix of the quote that does occur — a
+       model that trimmed or reworded the tail still points at the right place. */
+    for(var len=want.length-1;len>=2;len--){
+      var seq=want.slice(0,len);
+      for(var j=0;j+len<=have.length;j++){
+        if(runAt(j,seq)) return {s:j,e:j+len-1};
+      }
+    }
+    return null;
+  }
+
+  /* Attach suggestions to the page as unanswered notes. Anything that can't be
+     located is reported rather than silently dropped, and anything landing on
+     words already carrying a note is skipped so a second pass doesn't
+     duplicate the first. */
+  function attachSuggestions(list,pageId){
+    var pid=pageId==null?curId:pageId;
+    var target=nodes[pid];
+    if(!target) return {added:0,lost:0,dupe:0};
+    var toks=toksFor(pid);
+    var added=0, lost=0, dupe=0;
+
+    list.forEach(function(s){
+      var at=findPhrase(toks,s.quote);
+      if(!at){ lost++; return; }
+      var clash=target.notes.some(function(n){
+        return !isPageNote(n) && n.s<=at.e && n.e>=at.s;
+      });
+      if(clash){ dupe++; return; }
+      target.notes.push({id:nextId++, s:at.s, e:at.e, text:s.note, from:"ai"});
+      added++;
+    });
+
+    target.notes.sort(function(x,y){
+      var px=isPageNote(x)?0:1, py=isPageNote(y)?0:1;
+      return px-py || x.s-y.s || x.e-y.e;
+    });
+    render(); refresh();
+    return {added:added,lost:lost,dupe:dupe};
+  }
+
   function parseReply(raw){
     var m=raw.match(/\[\[notes\]\]([\s\S]*?)(?:\[\[\/notes\]\]|$)/i);
     var fenced=!!m;
@@ -1476,10 +1653,38 @@
     return {answers:map, fenced:fenced};
   }
 
+  /* ---------------- comparing models ----------------
+     The prompt is portable text, so the same one can go to several models. That
+     only helps if their answers can sit side by side, which means a note must
+     survive being answered. In compare mode a reply attaches answers to notes
+     instead of spending them; you promote the one you want afterwards.
+
+     Off by default, so the ordinary one-model flow is untouched. */
+  var compareMode=false;
+  var lastSource="";
+
+  /* Turn one answered note into a page. Shared by the direct path and by
+     keeping an answer in compare mode. */
+  function promote(pid,n,text,source){
+    var toks=toksFor(pid);
+    var at=Math.max(0,Math.min(n.e|0,Math.max(0,toks.length-1)));
+    /* A page note marks no words, so its reply carries no quote and anchors
+       at the top of the page rather than against a run of text. */
+    return makeNode(text.trim(),pid, isPageNote(n)
+      ? {quote:"", note:n.text, s:0, e:0, para:0, whole:true, source:source}
+      : {quote:quoteFor(n,toks), note:n.text, s:n.s, e:n.e,
+         para:toks[at]?toks[at].p:0, source:source});
+  }
+
+  function dropNote(pid,n){
+    if(!nodes[pid]) return;
+    nodes[pid].notes=nodes[pid].notes.filter(function(x){ return x.id!==n.id; });
+  }
+
   /* Answers come back numbered against the basket, and the basket spans pages,
      so each answer has to be routed to the page its own note sits on. One
      pasted reply can therefore grow branches in several places at once. */
-  function attachReplies(raw){
+  function attachReplies(raw,source){
     var parsed=parseReply(raw), map=parsed.answers;
     var list=noteEntries();
     var found=list.filter(function(e,i){ return map[String(i+1)]; }).length;
@@ -1488,21 +1693,31 @@
        !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
                 "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
 
-    var hit=0, kept=0, touched={}, drop={};
+    var hit=0, kept=0, touched={};
+
+    if(compareMode){
+      list.forEach(function(e,i){
+        var ans=map[String(i+1)];
+        if(!ans){ kept++; return; }
+        var n=e.note;
+        n.answers=n.answers||[];
+        n.answers.push({id:nextId++, source:source||"Reply "+(n.answers.length+1), text:ans.trim()});
+        hit++; touched[e.pid]=1;
+      });
+      render(); refresh();
+      toast(hit+" answer"+(hit>1?"s":"")+" from "+(source||"that reply")+
+            " — keep the ones you want");
+      return;
+    }
+
+    var drop={};
     list.forEach(function(e,i){
       var ans=map[String(i+1)];
       if(!ans){ kept++; return; }
-      var pid=e.pid, n=e.note, toks=toksFor(pid);
-      var at=Math.max(0,Math.min(n.e|0,Math.max(0,toks.length-1)));
-      /* A page note marks no words, so its reply carries no quote and anchors
-         at the top of the page rather than against a run of text. */
-      makeNode(ans.trim(),pid, isPageNote(n)
-        ? {quote:"", note:n.text, s:0, e:0, para:0, whole:true}
-        : {quote:quoteFor(n,toks), note:n.text, s:n.s, e:n.e,
-           para:toks[at]?toks[at].p:0});
+      promote(e.pid,e.note,ans,source);
       hit++;
-      touched[pid]=1;
-      (drop[pid]=drop[pid]||{})[n.id]=1;
+      touched[e.pid]=1;
+      (drop[e.pid]=drop[e.pid]||{})[e.note.id]=1;
     });
 
     Object.keys(drop).forEach(function(pid){
@@ -1514,6 +1729,23 @@
     var pages=Object.keys(touched).length;
     toast(hit+" attached"+(pages>1?" across "+pages+" pages":"")+
           (kept?", "+kept+" unanswered":""));
+  }
+
+  /* Promote one collected answer. The note stays while other answers are still
+     being weighed — keeping two makes two sibling pages off the same words,
+     which the graph already handles. Once the last answer is spoken for the
+     note has nothing left to decide, so it clears itself. */
+  function keepAnswer(pid,n,ans){
+    promote(pid,n,ans.text,ans.source);
+    n.answers=(n.answers||[]).filter(function(a){ return a.id!==ans.id; });
+    if(!n.answers.length) dropNote(pid,n);
+    render(); refresh(); syncNav();
+    toast("Kept "+(ans.source||"that answer"));
+  }
+
+  function discardAnswer(pid,n,ans){
+    n.answers=(n.answers||[]).filter(function(a){ return a.id!==ans.id; });
+    refresh();
   }
 
   function editNote(n,el){
@@ -1528,7 +1760,7 @@
       if(closed) return; closed=true;
       el.removeAttribute("contenteditable"); el.classList.remove("editing");
       var v=(el.innerText||el.textContent||"").trim();
-      if(v) n.text=v;
+      if(v && v!==n.text){ n.text=v; if(n.from==="ai") delete n.from; }
       refresh();
     }
     el.addEventListener("blur",done);
@@ -1902,6 +2134,38 @@
       s.addEventListener("click",function(){ editNote(n,s); });
       body.appendChild(q); body.appendChild(s);
 
+      /* Proposed by a model, not written by you — until you edit it, at which
+         point it stops being a suggestion and becomes your note. */
+      if(!tree && n.from==="ai"){
+        var tag=document.createElement("span");
+        tag.className="fromai";
+        tag.textContent="suggested";
+        body.appendChild(tag);
+      }
+
+      /* Answers collected while comparing, side by side under their note. */
+      if(!tree && n.answers && n.answers.length){
+        var box=document.createElement("div"); box.className="answers";
+        n.answers.forEach(function(a){
+          var row=document.createElement("div"); row.className="ans";
+          var who=document.createElement("div"); who.className="who";
+          who.textContent=a.source||"Reply";
+          who.title=a.source||"";
+          var what=document.createElement("div"); what.className="what"; what.textContent=a.text;
+          var acts=document.createElement("div"); acts.className="acts";
+          var keep=document.createElement("button"); keep.className="keep"; keep.textContent="Keep";
+          keep.title="Make this answer a page";
+          keep.addEventListener("click",function(ev){ ev.stopPropagation(); keepAnswer(e.pid,n,a); });
+          var toss=document.createElement("button"); toss.className="toss"; toss.textContent="×";
+          toss.setAttribute("aria-label","Discard this answer");
+          toss.addEventListener("click",function(ev){ ev.stopPropagation(); discardAnswer(e.pid,n,a); });
+          acts.appendChild(keep); acts.appendChild(toss);
+          row.appendChild(who); row.appendChild(what); row.appendChild(acts);
+          box.appendChild(row);
+        });
+        body.appendChild(box);
+      }
+
       if(!tree) body.appendChild(intentChip(n));
 
       var kill=document.createElement("button"); kill.className="kill"; kill.textContent="\u00D7";
@@ -2049,7 +2313,13 @@
   function openReply(){
     treeReplyMode=inTree();
     $("replytxt").value="";
-    openOverlay($("replyin"),$("replytxt"));
+    var on=compareMode&&!treeReplyMode;
+    $("srcrow").hidden=!on;
+    $("replysrc").value=lastSource;
+    $("replyq").textContent=on
+      ? "Paste one model's reply. Its answers sit beside any others until you pick."
+      : "Paste the whole reply. Only the notes block gets read.";
+    openOverlay($("replyin"),on?$("replysrc"):$("replytxt"));
   }
 
   function showMenu(on){
@@ -2071,6 +2341,15 @@
 
     $("pagenote").hidden=inTree()||!node();
     $("alwaysnote").hidden=inTree();
+
+    $("suggestbar").hidden=inTree()||!node();
+    var cb=$("comparebar");
+    cb.hidden=inTree()||!node();
+    cb.textContent=compareMode?"Comparing":"Compare";
+    cb.classList.toggle("on",compareMode);
+    cb.title=compareMode
+      ? "Replies collect side by side under each note. Tap to go back to attaching them straight away."
+      : "Send the same prompt to several models and keep their answers side by side before picking.";
     var sb=$("scopebar");
     sb.hidden=inTree()||Object.keys(nodes).length<2;
     sb.textContent=noteScope==="thread"?"All pages":"This page";
@@ -2093,6 +2372,14 @@
     noteScope=noteScope==="thread"?"page":"thread";
     saveScope();
     render(); refresh();
+  });
+
+  $("comparebar").addEventListener("click",function(e){
+    e.stopPropagation();
+    compareMode=!compareMode;
+    saveCompare();
+    if(compareMode) toast("Answers will wait side by side until you keep one");
+    refresh();
   });
 
   /* Roughly what you're about to paste. Words rather than tokens or bytes,
@@ -2168,6 +2455,21 @@
     syncCtx(); refresh();
   });
   $("copybar").addEventListener("click",function(e){ e.stopPropagation(); doCopy(); });
+
+  /* Copies a prompt that asks for an agenda rather than answers. The reply
+     comes back through the same Paste box, which tells the two apart. */
+  $("suggestbar").addEventListener("click",function(e){
+    e.stopPropagation();
+    if(!node()){ toast("Open a text first"); return; }
+    var txt=suggestPrompt(10);
+    if(!txt){ toast("Nothing to read yet"); return; }
+    copyText(txt,"Copied — paste it to a model, then paste its reply back",function(){
+      sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
+      prevEl.value=txt; promptDirty=true;
+      prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
+      toast("Select all and copy");
+    });
+  });
   $("replybar").addEventListener("click",function(e){ e.stopPropagation(); openReply(); });
   $("peekbar").addEventListener("click",function(e){
     e.stopPropagation();
@@ -2198,7 +2500,8 @@
         var n=nodes[id];
         return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
                 quote:n.quote,note:n.note,s:n.s,e:n.e,para:n.para,
-                whole:!!n.whole,merge:!!n.merge,status:n.status||"open"};
+                whole:!!n.whole,source:n.source||"",
+                merge:!!n.merge,status:n.status||"open"};
       })
     };
   }
@@ -2218,7 +2521,8 @@
         id:n.id, parents:Array.isArray(n.parents)?n.parents:[], text:n.text,
         notes:Array.isArray(n.notes)?n.notes:[], kids:[],
         quote:n.quote||"", note:n.note||"", s:n.s|0, e:n.e|0, para:n.para|0,
-        whole:!!n.whole, merge:!!n.merge, status:n.status||"open"
+        whole:!!n.whole, source:n.source||"",
+        merge:!!n.merge, status:n.status||"open"
       };
     });
     var ids=Object.keys(fresh);
@@ -2246,6 +2550,14 @@
           out.e=Math.max(out.s,Math.min(nt.e|0,last));
         }
         if(nt.mode&&modeByKey(nt.mode)) out.mode=nt.mode;
+        if(nt.from==="ai") out.from="ai";
+        if(Array.isArray(nt.answers)&&nt.answers.length){
+          out.answers=nt.answers.filter(function(a){
+            return a && typeof a.text==="string";
+          }).map(function(a){
+            return {id:a.id|0, source:a.source||"", text:a.text};
+          });
+        }
         return out;
       });
     });
@@ -2259,7 +2571,10 @@
 
     var next=Math.max(data.nextId|0,1);
     ids.forEach(function(id){
-      fresh[id].notes.forEach(function(nt){ next=Math.max(next,(nt.id|0)+1); });
+      fresh[id].notes.forEach(function(nt){
+        next=Math.max(next,(nt.id|0)+1);
+        (nt.answers||[]).forEach(function(a){ next=Math.max(next,(a.id|0)+1); });
+      });
     });
     keep.forEach(function(s){ next=Math.max(next,(s.id|0)+1); });
 
@@ -2335,6 +2650,18 @@
 
   /* The scope is a working preference, not part of the thread, so it outlives
      "New text" and travels with the browser rather than the export. */
+  var COMPARE_KEY="meristem.compare.v1";
+  function saveCompare(){
+    var store=storage();
+    if(!store) return;
+    try{ store.setItem(COMPARE_KEY,compareMode?"1":"0"); }catch(e){}
+  }
+  function loadCompare(){
+    var store=storage();
+    if(!store) return;
+    try{ compareMode=store.getItem(COMPARE_KEY)==="1"; }catch(e){}
+  }
+
   var SCOPE_KEY="meristem.scope.v1";
   function saveScope(){
     var store=storage();
@@ -2487,6 +2814,7 @@
       out.push(new Array(level+1).join("#")+" "+(title||"Reply"));
 
       var meta=[];
+      if(n.source) meta.push("answered by "+n.source);
       if(n.status&&n.status!=="open") meta.push(n.status);
       if(n.parents.length>1) meta.push("answers a note across "+n.parents.length+" pages");
       if(meta.length) out.push("*"+meta.join(" · ")+"*");
@@ -2502,6 +2830,10 @@
           var where=isPageNote(nt)?"about this page"
             :"“"+quoteFor(nt,toksFor(id))+"”";
           out.push("- "+where+" — "+nt.text.replace(/\n/g," "));
+          /* Answers gathered while comparing but not yet kept. */
+          (nt.answers||[]).forEach(function(a){
+            out.push("  - *"+(a.source||"reply")+":* "+a.text.replace(/\n/g," "));
+          });
         });
       }
     });
@@ -2577,10 +2909,27 @@
   });
   $("replysave").addEventListener("click",function(){
     var v=$("replytxt").value;
+    var src=($("replysrc").value||"").trim();
+    if(src) lastSource=src;
     closeOverlay($("replyin"));
     if(!v.trim()){ treeReplyMode=false; return; }
+
+    /* One paste box for both directions: a [[suggest]] block is an agenda to
+       add, a [[notes]] block is answers to attach. */
+    var sugg=parseSuggestions(v);
+    if(sugg && !treeReplyMode){
+      if(!sugg.length){ toast("No suggestions found in that block"); return; }
+      var r=attachSuggestions(sugg);
+      var bits=[];
+      if(r.added) bits.push(r.added+" note"+(r.added>1?"s":"")+" suggested");
+      if(r.dupe) bits.push(r.dupe+" already marked");
+      if(r.lost) bits.push(r.lost+" couldn't be placed");
+      toast(bits.length?bits.join(", "):"Nothing to add");
+      return;
+    }
+
     if(treeReplyMode){ treeReplyMode=false; attachTreeReplies(v); }
-    else attachReplies(v);
+    else attachReplies(v,src);
   });
   $("replycancel").addEventListener("click",function(){ closeOverlay($("replyin")); });
   $("replyin").addEventListener("click",function(e){
@@ -2961,6 +3310,7 @@
       bits+='<span class="topen">Still open: '+esc(nt.text)+"</span>";
     });
     var meta=[];
+    if(n.source) meta.push(n.source);
     if(n.notes.length&&!full) meta.push(n.notes.length+" note"+(n.notes.length>1?"s":""));
     if(n.kids.length) meta.push(n.kids.length+" repl"+(n.kids.length>1?"ies":"y"));
     if(meta.length) bits+='<span class="tm">'+meta.join(" \u00B7 ")+"</span>";
@@ -3179,6 +3529,7 @@
       head.className="rhead";
       var bits=nd.parents.length?esc(nd.note):"The original text";
       var meta=[];
+      if(nd.source) meta.push(nd.source);
       if(nd.parents.length>1) meta.push("answers a note across "+nd.parents.length+" pages");
       if(nd.status!=="open") meta.push(nd.status);
       if(nd.notes.length) meta.push(nd.notes.length+" note"+(nd.notes.length>1?"s":"")+" with no reply yet");
@@ -3463,6 +3814,7 @@
   }
 
   loadScope();
+  loadCompare();
   syncMode();
   start();
 

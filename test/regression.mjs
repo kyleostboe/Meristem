@@ -682,6 +682,205 @@ console.log('\nthe manifest and worker are wired up');
   await page.close_();
 }
 
+/* ---------- comparing models ---------- */
+
+async function pasteReply(page, body, source) {
+  await page.click('#replybar'); await page.waitForTimeout(250);
+  if (source != null && !(await page.locator('#srcrow').isHidden())) {
+    await page.fill('#replysrc', source);
+  }
+  await page.fill('#replytxt', body);
+  await page.click('#replysave'); await page.waitForTimeout(450);
+}
+const answersOn = (page, i) => page.$$eval(
+  `.note:nth-of-type(${i}) .ans`,
+  ns => ns.map(a => a.querySelector('.who').textContent + ': ' + a.querySelector('.what').textContent),
+);
+
+console.log('\ncomparing answers from several models');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'is this true?');
+  await type(page, 30, 'needs a date');
+
+  await page.click('#grab'); await page.waitForTimeout(250);
+  await page.click('#comparebar'); await page.waitForTimeout(300);
+  eq('the toggle reports itself', await page.locator('#comparebar').textContent(), 'Comparing');
+
+  await pasteReply(page, '[[notes]]\n1 → Claude on one\n2 → Claude on two\n[[/notes]]', 'Claude');
+  eq('a reply no longer spends the notes', await sheet(page), ['is this true?', 'needs a date']);
+  eq('no page is created yet', await page.locator('.rnode').count(), 0);
+
+  await pasteReply(page, '[[notes]]\n1 → GPT on one\n[[/notes]]', 'GPT-5');
+  await pasteReply(page, '[[notes]]\n1 → Gemini on one\n[[/notes]]', 'Gemini');
+
+  eq('three answers sit under the first note', await answersOn(page, 1),
+     ['Claude: Claude on one', 'GPT-5: GPT on one', 'Gemini: Gemini on one']);
+  eq('and one under the second', await answersOn(page, 2), ['Claude: Claude on two']);
+
+  // keep the middle one
+  await page.locator('.ans .keep').nth(1).scrollIntoViewIfNeeded();
+  await page.locator('.ans .keep').nth(1).click(); await page.waitForTimeout(500);
+
+  eq('the kept answer becomes a page', await page.locator('.rnode').count(), 1);
+  const s = await state(page);
+  const kept = s.nodes.find(n => n.parents.length);
+  eq('tagged with who wrote it', kept.source, 'GPT-5');
+  eq('and labelled with the note it answers', kept.note, 'is this true?');
+
+  eq('the others stay for comparison', await answersOn(page, 1),
+     ['Claude: Claude on one', 'Gemini: Gemini on one']);
+  check('the note is still open', (await sheet(page)).includes('is this true?'));
+
+  // discarding down to the last one, then keeping it, clears the note
+  await page.locator('.ans .toss').first().click(); await page.waitForTimeout(300);
+  await page.locator('.ans .keep').first().scrollIntoViewIfNeeded();
+  await page.locator('.ans .keep').first().click(); await page.waitForTimeout(500);
+  check('keeping the last answer clears the note',
+    !(await sheet(page)).includes('is this true?'), JSON.stringify(await sheet(page)));
+
+  eq('no exceptions', page.errors, []);
+  await page.close_();
+}
+
+console.log('\ncompare mode leaves the ordinary flow alone');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a note');
+  check('it is off by default',
+    (await page.locator('#comparebar').textContent()) === 'Compare');
+  await pasteReply(page, '[[notes]]\n1 → answered straight away\n[[/notes]]');
+  eq('the note is spent as before', await sheet(page), []);
+  eq('and becomes a page', await page.locator('.rnode').count(), 1);
+  await page.close_();
+}
+
+console.log('\nthe model that wrote a page is shown and kept');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a note');
+  await page.click('#grab'); await page.waitForTimeout(250);
+  await page.click('#comparebar'); await page.waitForTimeout(300);
+  await pasteReply(page, '[[notes]]\n1 → an answer\n[[/notes]]', 'Claude');
+  await page.locator('.ans .keep').first().scrollIntoViewIfNeeded();
+  await page.locator('.ans .keep').first().click(); await page.waitForTimeout(500);
+
+  const meta = await page.locator('.rnode .rmeta').first().textContent();
+  check('the reader credits the source', meta.includes('Claude'), meta);
+
+  await page.reload(); await page.waitForTimeout(700);
+  const after = await page.locator('.rnode .rmeta').first().textContent();
+  check('and it survives a reload', after.includes('Claude'), after);
+  await page.close_();
+}
+
+/* ---------- suggested notes ---------- */
+
+console.log('\nasking a model which passages are worth interrogating');
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 900, height: 1000 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+    acceptDownloads: true,
+  });
+  await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(`window.confirm = () => true;`);
+  const page = await ctx.newPage();
+  page.errors = [];
+  page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
+  await page.goto(URL_); await page.waitForTimeout(200);
+  page.close_ = () => ctx.close();
+
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.click('#suggestbar'); await page.waitForTimeout(400);
+  const prompt = await page.evaluate(() => navigator.clipboard.readText());
+
+  check('it asks for an agenda, not answers',
+    /mark the passages worth interrogating/.test(prompt), prompt.slice(0, 160));
+  check('it carries the text', prompt.includes('The bottleneck'));
+  check('it asks for verbatim quotes it can anchor',
+    /\[\[suggest\]\]/.test(prompt) && /copied verbatim/.test(prompt));
+  check('it warns off generic notes', /needs more evidence/.test(prompt));
+
+  // the same paste box takes the reply back
+  await pasteReply(page, `Here are the weak points.
+
+[[suggest]]
+"The bottleneck isn't model quality anymore" → Is this actually true?
+"That assumption expired about eighteen months ago" → Expired according to what?
+"a sentence that appears nowhere in this text at all" → cannot be placed
+[[/suggest]]`);
+
+  eq('the placeable ones arrive as notes', await sheet(page),
+     ['Is this actually true?', 'Expired according to what?']);
+  const toast = await page.locator('#toast').textContent();
+  check('and the unplaceable one is reported, not silently dropped',
+    /couldn't be placed/.test(toast), toast);
+
+  // anchored to the right words, not the top of the page
+  const quotes = await page.$$eval('.note .quote', ns => ns.map(n => n.textContent));
+  check('anchored to the quoted passage',
+    /The bottleneck isn't model quality anymore/.test(quotes[0]), quotes[0]);
+  check('and the second to its own', /eighteen months ago/.test(quotes[1]), quotes[1]);
+
+  check('they are marked as suggestions',
+    (await page.locator('.note .fromai').count()) === 2);
+
+  // a second pass must not duplicate the first
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn't model quality anymore" → the same passage again
+[[/suggest]]`);
+  eq('an overlapping suggestion is skipped', (await sheet(page)).length, 2);
+  check('and says so', /already marked/.test(await page.locator('#toast').textContent()));
+
+  eq('no exceptions', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na suggested note becomes yours once you edit it');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn't model quality anymore" → a suggestion
+[[/suggest]]`);
+  eq('it starts as a suggestion', await page.locator('.note .fromai').count(), 1);
+
+  await page.click('#grab'); await page.waitForTimeout(250);
+  await page.locator('.note .said').first().scrollIntoViewIfNeeded();
+  await page.locator('.note .said').first().click(); await page.waitForTimeout(250);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('sharpened by me');
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+
+  eq('editing makes it yours', await page.locator('.note .fromai').count(), 0);
+  eq('and keeps the text', await sheet(page), ['sharpened by me']);
+
+  await page.reload(); await page.waitForTimeout(700);
+  eq('which survives a reload', await page.locator('.note .fromai').count(), 0);
+  await page.close_();
+}
+
+console.log('\nsuggestions survive punctuation drift');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  // curly apostrophe and a trailing clause the text doesn't have
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn’t model quality anymore, it’s the interface" → smart quotes
+"Teams that shipped in 2023 assumed the hard part was something else entirely" → partial tail
+[[/suggest]]`);
+  const got = await sheet(page);
+  check('a quote with different apostrophes still anchors',
+    got.includes('smart quotes'), JSON.stringify(got));
+  check('and one whose tail drifted falls back to the matching prefix',
+    got.includes('partial tail'), JSON.stringify(got));
+  await page.close_();
+}
+
 /* ---------- done ---------- */
 
 await browser.close();
