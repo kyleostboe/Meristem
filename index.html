@@ -520,6 +520,12 @@
   .scopebtn:hover{border-color:var(--ink);color:var(--ink)}
   .scopebtn.on{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:700}
 
+  .note .fromai{
+    display:inline-block;margin-top:5px;margin-right:8px;
+    font-family:"Newsreader",Georgia,serif;font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);opacity:.75;
+  }
+
   /* ---------- answers waiting to be compared ---------- */
   #comparebar.on{color:var(--mark);font-weight:700}
   .answers{margin:8px 0 2px;border-left:2px solid var(--rule);padding-left:11px}
@@ -684,6 +690,7 @@
       <button class="mini" id="comparebar">Compare</button>
       <button class="mini" id="ctxbar">Context: path</button>
       <button class="mini solid" id="copybar">Copy prompt</button>
+      <button class="mini" id="suggestbar" title="Ask a model which passages are worth interrogating">Suggest</button>
       <button class="mini" id="peekbar">Preview</button>
       <button class="mini" id="replybar">Paste reply</button>
       <span class="psize" id="psize" hidden></span>
@@ -1511,6 +1518,126 @@
      Reports whether the [[notes]] fence was present: without it we are reading
      the whole message and any incidental numbered list looks like an answer,
      so the caller confirms before acting. */
+  /* ---------------- suggested notes ----------------
+     A blank 40-page document is the hardest place to start: you know something
+     is wrong with it but not where to put your finger. So the model can be
+     asked for an agenda instead of an answer — a set of passages worth
+     interrogating, which arrive as ordinary unanswered notes.
+
+     They are proposals, not conclusions. You delete the generic ones, sharpen
+     the rest, add your own, and only then ask for answers. The model suggests
+     what to argue about; you decide what is worth arguing about.
+
+     This goes out and comes back as text like everything else, so it works
+     with any model today and an API only ever replaces the transport. */
+  var SUGGEST_HEAD=
+    "Below is a piece of text I'm about to work through. Before I do, mark the "+
+    "passages worth interrogating.";
+
+  var SUGGEST_TAIL=
+    "Pick the places where the argument actually turns: a claim doing more work "+
+    "than its evidence supports, a term used two ways, a step that doesn't "+
+    "follow, an objection the text never meets, a hedge covering a gap. Skip "+
+    "anything a careful reader would already grant, and skip generic advice — "+
+    "\"needs more evidence\" and \"consider the counterargument\" are not notes, "+
+    "they are noise. Fewer and sharper beats more and safer.\n\n"+
+    "Write each one as the note I would have written myself: first person, "+
+    "one or two sentences, addressed to the author. A question where you want "+
+    "an answer, a flat statement where you think it's wrong.";
+
+  var SUGGEST_BLOCK=
+    "\n\nEnd your message with a block in exactly this format, so my app can "+
+    "attach each note to the words it is about:\n\n"+
+    "[[suggest]]\n"+
+    "\"the exact words from the text, copied verbatim\" → the note\n"+
+    "\"another exact quote\" → another note\n"+
+    "[[/suggest]]\n\n"+
+    "Each quote must appear in the text word for word, and be long enough to "+
+    "occur only once — a short sentence or a distinctive clause. Keep each note "+
+    "on one line. Write whatever you like above the block.";
+
+  function suggestPrompt(count){
+    var n=node();
+    if(!n) return "";
+    return SUGGEST_HEAD+"\n\n"+
+           "--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n"+
+           "Give me at most "+(count||10)+" notes.\n\n"+
+           SUGGEST_TAIL+standingBlock()+SUGGEST_BLOCK;
+  }
+
+  function parseSuggestions(raw){
+    var m=raw.match(/\[\[suggest\]\]([\s\S]*?)(?:\[\[\/suggest\]\]|$)/i);
+    if(!m) return null;
+    var out=[];
+    m[1].split(/\n/).forEach(function(L){
+      /* "quote" → note, tolerating the quote styles models actually emit. */
+      var hit=L.match(/^\s*[-*]?\s*["“'']([\s\S]+?)["”'']\s*(?:→|->|=>|:|—|\|)\s*(.+?)\s*$/);
+      if(!hit) return;
+      var quote=hit[1].trim(), note=hit[2].trim();
+      if(quote&&note) out.push({quote:quote,note:note});
+    });
+    return out;
+  }
+
+  /* Find where a quoted phrase sits in a page's tokens. Models paraphrase
+     punctuation and casing even when told not to, so compare on letters and
+     digits alone, and fall back to the longest run that does match rather than
+     dropping the note entirely. */
+  function normTok(t){ return (t||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
+
+  function findPhrase(toks,quote){
+    var want=quote.split(/\s+/).map(normTok).filter(Boolean);
+    if(!want.length||!toks.length) return null;
+    var have=toks.map(function(t){ return normTok(t.t); });
+
+    function runAt(i,seq){
+      for(var k=0;k<seq.length;k++) if(have[i+k]!==seq[k]) return false;
+      return true;
+    }
+    for(var i=0;i+want.length<=have.length;i++){
+      if(runAt(i,want)) return {s:i,e:i+want.length-1};
+    }
+    /* No exact run. Take the longest prefix of the quote that does occur — a
+       model that trimmed or reworded the tail still points at the right place. */
+    for(var len=want.length-1;len>=2;len--){
+      var seq=want.slice(0,len);
+      for(var j=0;j+len<=have.length;j++){
+        if(runAt(j,seq)) return {s:j,e:j+len-1};
+      }
+    }
+    return null;
+  }
+
+  /* Attach suggestions to the page as unanswered notes. Anything that can't be
+     located is reported rather than silently dropped, and anything landing on
+     words already carrying a note is skipped so a second pass doesn't
+     duplicate the first. */
+  function attachSuggestions(list,pageId){
+    var pid=pageId==null?curId:pageId;
+    var target=nodes[pid];
+    if(!target) return {added:0,lost:0,dupe:0};
+    var toks=toksFor(pid);
+    var added=0, lost=0, dupe=0;
+
+    list.forEach(function(s){
+      var at=findPhrase(toks,s.quote);
+      if(!at){ lost++; return; }
+      var clash=target.notes.some(function(n){
+        return !isPageNote(n) && n.s<=at.e && n.e>=at.s;
+      });
+      if(clash){ dupe++; return; }
+      target.notes.push({id:nextId++, s:at.s, e:at.e, text:s.note, from:"ai"});
+      added++;
+    });
+
+    target.notes.sort(function(x,y){
+      var px=isPageNote(x)?0:1, py=isPageNote(y)?0:1;
+      return px-py || x.s-y.s || x.e-y.e;
+    });
+    render(); refresh();
+    return {added:added,lost:lost,dupe:dupe};
+  }
+
   function parseReply(raw){
     var m=raw.match(/\[\[notes\]\]([\s\S]*?)(?:\[\[\/notes\]\]|$)/i);
     var fenced=!!m;
@@ -1633,7 +1760,7 @@
       if(closed) return; closed=true;
       el.removeAttribute("contenteditable"); el.classList.remove("editing");
       var v=(el.innerText||el.textContent||"").trim();
-      if(v) n.text=v;
+      if(v && v!==n.text){ n.text=v; if(n.from==="ai") delete n.from; }
       refresh();
     }
     el.addEventListener("blur",done);
@@ -2007,6 +2134,15 @@
       s.addEventListener("click",function(){ editNote(n,s); });
       body.appendChild(q); body.appendChild(s);
 
+      /* Proposed by a model, not written by you — until you edit it, at which
+         point it stops being a suggestion and becomes your note. */
+      if(!tree && n.from==="ai"){
+        var tag=document.createElement("span");
+        tag.className="fromai";
+        tag.textContent="suggested";
+        body.appendChild(tag);
+      }
+
       /* Answers collected while comparing, side by side under their note. */
       if(!tree && n.answers && n.answers.length){
         var box=document.createElement("div"); box.className="answers";
@@ -2206,6 +2342,7 @@
     $("pagenote").hidden=inTree()||!node();
     $("alwaysnote").hidden=inTree();
 
+    $("suggestbar").hidden=inTree()||!node();
     var cb=$("comparebar");
     cb.hidden=inTree()||!node();
     cb.textContent=compareMode?"Comparing":"Compare";
@@ -2318,6 +2455,21 @@
     syncCtx(); refresh();
   });
   $("copybar").addEventListener("click",function(e){ e.stopPropagation(); doCopy(); });
+
+  /* Copies a prompt that asks for an agenda rather than answers. The reply
+     comes back through the same Paste box, which tells the two apart. */
+  $("suggestbar").addEventListener("click",function(e){
+    e.stopPropagation();
+    if(!node()){ toast("Open a text first"); return; }
+    var txt=suggestPrompt(10);
+    if(!txt){ toast("Nothing to read yet"); return; }
+    copyText(txt,"Copied — paste it to a model, then paste its reply back",function(){
+      sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
+      prevEl.value=txt; promptDirty=true;
+      prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
+      toast("Select all and copy");
+    });
+  });
   $("replybar").addEventListener("click",function(e){ e.stopPropagation(); openReply(); });
   $("peekbar").addEventListener("click",function(e){
     e.stopPropagation();
@@ -2398,6 +2550,7 @@
           out.e=Math.max(out.s,Math.min(nt.e|0,last));
         }
         if(nt.mode&&modeByKey(nt.mode)) out.mode=nt.mode;
+        if(nt.from==="ai") out.from="ai";
         if(Array.isArray(nt.answers)&&nt.answers.length){
           out.answers=nt.answers.filter(function(a){
             return a && typeof a.text==="string";
@@ -2760,6 +2913,20 @@
     if(src) lastSource=src;
     closeOverlay($("replyin"));
     if(!v.trim()){ treeReplyMode=false; return; }
+
+    /* One paste box for both directions: a [[suggest]] block is an agenda to
+       add, a [[notes]] block is answers to attach. */
+    var sugg=parseSuggestions(v);
+    if(sugg && !treeReplyMode){
+      if(!sugg.length){ toast("No suggestions found in that block"); return; }
+      var r=attachSuggestions(sugg);
+      var bits=[];
+      if(r.added) bits.push(r.added+" note"+(r.added>1?"s":"")+" suggested");
+      if(r.dupe) bits.push(r.dupe+" already marked");
+      if(r.lost) bits.push(r.lost+" couldn't be placed");
+      toast(bits.length?bits.join(", "):"Nothing to add");
+      return;
+    }
 
     if(treeReplyMode){ treeReplyMode=false; attachTreeReplies(v); }
     else attachReplies(v,src);

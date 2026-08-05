@@ -777,6 +777,110 @@ console.log('\nthe model that wrote a page is shown and kept');
   await page.close_();
 }
 
+/* ---------- suggested notes ---------- */
+
+console.log('\nasking a model which passages are worth interrogating');
+{
+  const ctx = await browser.newContext({
+    viewport: { width: 900, height: 1000 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+    acceptDownloads: true,
+  });
+  await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(`window.confirm = () => true;`);
+  const page = await ctx.newPage();
+  page.errors = [];
+  page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
+  await page.goto(URL_); await page.waitForTimeout(200);
+  page.close_ = () => ctx.close();
+
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.click('#suggestbar'); await page.waitForTimeout(400);
+  const prompt = await page.evaluate(() => navigator.clipboard.readText());
+
+  check('it asks for an agenda, not answers',
+    /mark the passages worth interrogating/.test(prompt), prompt.slice(0, 160));
+  check('it carries the text', prompt.includes('The bottleneck'));
+  check('it asks for verbatim quotes it can anchor',
+    /\[\[suggest\]\]/.test(prompt) && /copied verbatim/.test(prompt));
+  check('it warns off generic notes', /needs more evidence/.test(prompt));
+
+  // the same paste box takes the reply back
+  await pasteReply(page, `Here are the weak points.
+
+[[suggest]]
+"The bottleneck isn't model quality anymore" → Is this actually true?
+"That assumption expired about eighteen months ago" → Expired according to what?
+"a sentence that appears nowhere in this text at all" → cannot be placed
+[[/suggest]]`);
+
+  eq('the placeable ones arrive as notes', await sheet(page),
+     ['Is this actually true?', 'Expired according to what?']);
+  const toast = await page.locator('#toast').textContent();
+  check('and the unplaceable one is reported, not silently dropped',
+    /couldn't be placed/.test(toast), toast);
+
+  // anchored to the right words, not the top of the page
+  const quotes = await page.$$eval('.note .quote', ns => ns.map(n => n.textContent));
+  check('anchored to the quoted passage',
+    /The bottleneck isn't model quality anymore/.test(quotes[0]), quotes[0]);
+  check('and the second to its own', /eighteen months ago/.test(quotes[1]), quotes[1]);
+
+  check('they are marked as suggestions',
+    (await page.locator('.note .fromai').count()) === 2);
+
+  // a second pass must not duplicate the first
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn't model quality anymore" → the same passage again
+[[/suggest]]`);
+  eq('an overlapping suggestion is skipped', (await sheet(page)).length, 2);
+  check('and says so', /already marked/.test(await page.locator('#toast').textContent()));
+
+  eq('no exceptions', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na suggested note becomes yours once you edit it');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn't model quality anymore" → a suggestion
+[[/suggest]]`);
+  eq('it starts as a suggestion', await page.locator('.note .fromai').count(), 1);
+
+  await page.click('#grab'); await page.waitForTimeout(250);
+  await page.locator('.note .said').first().scrollIntoViewIfNeeded();
+  await page.locator('.note .said').first().click(); await page.waitForTimeout(250);
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('sharpened by me');
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+
+  eq('editing makes it yours', await page.locator('.note .fromai').count(), 0);
+  eq('and keeps the text', await sheet(page), ['sharpened by me']);
+
+  await page.reload(); await page.waitForTimeout(700);
+  eq('which survives a reload', await page.locator('.note .fromai').count(), 0);
+  await page.close_();
+}
+
+console.log('\nsuggestions survive punctuation drift');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  // curly apostrophe and a trailing clause the text doesn't have
+  await pasteReply(page, `[[suggest]]
+"The bottleneck isn’t model quality anymore, it’s the interface" → smart quotes
+"Teams that shipped in 2023 assumed the hard part was something else entirely" → partial tail
+[[/suggest]]`);
+  const got = await sheet(page);
+  check('a quote with different apostrophes still anchors',
+    got.includes('smart quotes'), JSON.stringify(got));
+  check('and one whose tail drifted falls back to the matching prefix',
+    got.includes('partial tail'), JSON.stringify(got));
+  await page.close_();
+}
+
 /* ---------- done ---------- */
 
 await browser.close();
