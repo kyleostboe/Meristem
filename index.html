@@ -99,9 +99,11 @@
     background:var(--paper);
   }
   .wordmark{
+    display:flex;align-items:center;gap:6px;
     font-family:"Newsreader",Georgia,serif;font-weight:700;
     font-size:20px;letter-spacing:.002em;color:var(--ink);
   }
+  .wordmark svg{flex:0 0 auto;color:var(--ink)}
   .acts{margin-left:auto;display:flex;align-items:center;gap:12px;flex:0 0 auto;min-height:39px}
   .tbtn,.btn,.mini,.topbar .reset{
     font-family:"Newsreader",Georgia,serif;font-size:14px;font-weight:700;letter-spacing:.002em;
@@ -605,7 +607,7 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <span class="wordmark">Meristem</span>
+    <span class="wordmark"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V11" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M12 11Q7 11 5 5Q10 6 12 11Z" fill="var(--mark)"/><path d="M12 11Q17 11 19 5Q14 6 12 11Z" fill="currentColor"/></svg>Meristem</span>
     <button class="reset" id="up" hidden>&#8592; Back</button>
     <span class="crumb" id="crumb" hidden></span>
     <span class="acts">
