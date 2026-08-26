@@ -115,12 +115,43 @@ const FAKE_OPENROUTER = () => {
     const body = JSON.parse(init.body);
     window.__asked.push({
       model: body.model,
-      prompt: body.messages[0].content,
+      prompt: body.messages[body.messages.length - 1].content,
+      messages: body.messages,
+      stream: !!body.stream,
       auth: init.headers.Authorization,
     });
     if (window.__fail) return Promise.resolve(json({ error: { message: 'refused' } }, window.__fail));
+    const answer = window.__replies[body.model] ?? '';
+
+    // A chat turn asks for SSE; a notes round waits for the whole thing.
+    if (body.stream) {
+      const enc = new TextEncoder();
+      const words = answer.split(' ');
+      const gap = window.__slow[body.model] || 0;
+      return Promise.resolve(new Response(new ReadableStream({
+        start(c) {
+          let k = 0, stopped = false;
+          const bail = () => {
+            stopped = true;
+            // a real abort errors the body stream rather than ending it
+            try { c.error(new DOMException('aborted', 'AbortError')); } catch {}
+          };
+          if (init.signal) init.signal.addEventListener('abort', bail);
+          const tick = () => {
+            if (stopped) return;
+            if (k >= words.length) { c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); return; }
+            c.enqueue(enc.encode('data: ' + JSON.stringify(
+              { choices: [{ delta: { content: (k ? ' ' : '') + words[k] } }] }) + '\n\n'));
+            k++;
+            setTimeout(tick, gap);
+          };
+          setTimeout(tick, gap);
+        },
+      }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } }));
+    }
+
     return new Promise(res => setTimeout(() => res(json({
-      choices: [{ message: { content: window.__replies[body.model] ?? '' }, finish_reason: 'stop' }],
+      choices: [{ message: { content: answer }, finish_reason: 'stop' }],
     })), window.__slow[body.model] || 0));
   };
 };
@@ -179,6 +210,13 @@ async function connect(page, models, key = 'sk-or-v1-TESTKEY') {
     'meristem.openrouter.v1', JSON.stringify({ key: k, models: m })), [models, key]);
   await page.reload();
   await page.waitForTimeout(300);
+}
+
+/* Type into the message box and send, the way the box is actually used. */
+async function say(page, text, wait = 700) {
+  await page.fill('#saytxt', text);
+  await page.click('#saysend');
+  await page.waitForTimeout(wait);
 }
 
 async function reply(page, body) {
@@ -1108,6 +1146,195 @@ console.log('\nchoosing models from the catalogue');
   eq('and leaves nothing behind',
      await page.evaluate(() => localStorage.getItem('meristem.openrouter.v1')), null);
   eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na message with nothing to annotate starts the thread');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  check('the box is there before any text is', await page.locator('#composer').isVisible(), '');
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = 'Because the reading half has no controls.';
+  });
+  await say(page, 'why is chat the wrong shape?');
+
+  const s = await state(page);
+  eq('two pages: what I said and what came back', s.nodes.length, 2);
+  eq('the thread begins with my message', s.nodes[0].text, 'why is chat the wrong shape?');
+  eq('marked as mine', s.nodes[0].mine, true);
+  eq('the answer hangs off it', s.nodes[1].parents, [s.nodes[0].id]);
+  eq('and is not mine', s.nodes[1].mine, false);
+  eq('it was streamed', (await page.evaluate(() => window.__asked))[0].stream, true);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nthe whole conversation goes out, not just the last line');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'First answer.'; });
+  await say(page, 'first question');
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'Second answer.'; });
+  await say(page, 'second question');
+
+  eq('every turn so far, in order',
+     (await page.evaluate(() => window.__asked))[1].messages, [
+    { role: 'user', content: 'first question' },
+    { role: 'assistant', content: 'First answer.' },
+    { role: 'user', content: 'second question' },
+  ]);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na standing instruction is a system prompt');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.click('#alwaysnote'); await page.waitForTimeout(350);
+  await page.fill('#typetxt', 'Answer in British English.');
+  await page.click('#typesave'); await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'Quite.'; });
+  await say(page, 'go on then');
+
+  const sent = (await page.evaluate(() => window.__asked))[0].messages;
+  eq('it leads the conversation', sent[0],
+     { role: 'system', content: 'Answer in British English.' });
+  check('and the text I am reading goes in as material',
+        sent[1].role === 'user' && sent[1].content.includes("text I'm working from"),
+        JSON.stringify(sent[1]).slice(0, 140));
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na chat reply can be marked up the moment it lands');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = 'Memory is the wrong lever entirely.';
+  });
+  await say(page, 'what should I fix?');
+  await type(page, 0, 'is it though');
+
+  const s = await state(page);
+  const answer = s.nodes.find(x => !x.mine && x.parents.length);
+  eq('the note lands on the reply', notesOn(s, answer.id), ['is it though']);
+
+  // answering that note carries on in the same thread
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = '[[notes]]\n1 → It is.\n[[/notes]]';
+  });
+  await page.click('#sendbar'); await page.waitForTimeout(900);
+  const after = await state(page);
+  eq('the answer branches off the reply', after.nodes.length, 3);
+  eq('hanging off the page the note was on',
+     after.nodes[2].parents, [answer.id]);
+  eq('and the note is spent', notesOn(after, answer.id), []);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nwhat was said before sits above what is being read');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'An answer.'; });
+  await say(page, 'a question');
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'Another answer.'; });
+  await say(page, 'a follow-up');
+
+  eq('three turns of scrollback above the live page',
+     await page.$$eval('.turn .tt', ns => ns.map(n => n.textContent)),
+     ['a question', 'An answer.', 'a follow-up']);
+  eq('each labelled with who said it',
+     await page.$$eval('.turn .tw', ns => ns.map(n => n.textContent)),
+     ['You', 'free-one', 'You']);
+  eq('and so is the page being read',
+     await page.locator('.nowwho').textContent(), 'free-one');
+
+  await page.locator('.turn').nth(1).click(); await page.waitForTimeout(450);
+  eq('tapping an earlier turn makes it the page you can mark up',
+     await page.$$eval('.reader > p', ns => ns.map(n => n.textContent.replace(/\s+/g, ' ').trim())),
+     ['An answer.']);
+  eq('with what came before above it and what came after below',
+     await page.$$eval('.back .tt', ns => ns.map(n => n.textContent)),
+     ['a question', 'a follow-up', 'Another answer.']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na turn that comes to nothing leaves nothing behind');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'fine'; });
+  await say(page, 'the first one works');
+
+  await page.evaluate(() => { window.__fail = 429; });
+  await say(page, 'this one will not');
+
+  eq('the failed turn left no pages behind', (await state(page)).nodes.length, 2);
+  eq('and my message is back in the box, not lost',
+     await page.locator('#saytxt').inputValue(), 'this one will not');
+  const said = await page.locator('#toast').textContent();
+  check('with the reason on screen', /rate limited/i.test(said), said);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nstopping keeps what had already arrived');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = 'one two three four five six seven eight nine ten';
+    window.__slow['stub/free-one:free'] = 110;
+  });
+  await page.fill('#saytxt', 'take your time');
+  await page.click('#saysend'); await page.waitForTimeout(500);
+  eq('the button offers to stop', await page.locator('#saysend').textContent(), 'Stop');
+  await page.click('#saysend'); await page.waitForTimeout(700);
+
+  const kid = (await state(page)).nodes.find(x => !x.mine && x.parents.length);
+  check('the part that arrived is kept as a page',
+        !!kid && kid.text.indexOf('one') === 0, JSON.stringify(kid && kid.text));
+  eq('and the button goes back to sending',
+     await page.locator('#saysend').textContent(), 'Send');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na conversation is an ordinary thread');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'An answer worth keeping.'; });
+  await say(page, 'a question worth asking');
+
+  await page.reload(); await page.waitForTimeout(700);
+  const s = await state(page);
+  eq('it comes back after a reload', s.nodes.length, 2);
+  eq('still knowing which turn was mine', s.nodes[0].mine, true);
+  eq('and the scrollback is drawn again',
+     await page.$$eval('.turn .tt', ns => ns.map(n => n.textContent)),
+     ['a question worth asking']);
+  check('the turn markers travel with the thread',
+        /"mine":true/.test(await page.evaluate(
+          () => localStorage.getItem('meristem.thread.v1'))), '');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nwithout a key there is no message box');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  check('the composer stays out of the way', await page.locator('#composer').isHidden(), '');
+  eq('and nothing was sent', (await page.evaluate(() => window.__asked)).length, 0);
   await page.close_();
 }
 

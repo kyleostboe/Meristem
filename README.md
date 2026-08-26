@@ -10,6 +10,10 @@ on the message you are reading. Meristem puts the interaction on the read
 surface: you mark up the text itself, and the conversation branches out of your
 marks.
 
+Give it an [OpenRouter](https://openrouter.ai/keys) key and it is also an
+ordinary chat client — a message box, streamed answers, the lot. The difference
+is what you can do with an answer once it arrives.
+
 ## How it works
 
 1. **Paste some prose** into the reader.
@@ -84,6 +88,44 @@ flattens the same thing into a document.
 `Export` writes either a **thread file** (`.json`, to reload later or move to
 another device) or a **readable document** (`.md`, the whole thread as text).
 Threads import by paste or drag-and-drop.
+
+## Just talking
+
+With a model connected there is a message box at the bottom of the screen. Type
+a question, press send, and the answer streams in. No text to paste first, no
+words to mark up — it is a chat, and on an empty screen it is the only thing
+there.
+
+What makes it worth using is where the answer lands. Your message becomes a
+page and the answer becomes its child, so a conversation is an ordinary branch
+of the same tree everything else lives in: it shows up in the map, in `Read
+all`, in an export — and **any reply can be marked up the moment it arrives**.
+Hold a word in the answer you just got and you are back in the app's real work,
+branching off the phrase that caught you. Chat is not a second mode bolted
+alongside annotation; it is the way into it. Talk until something is worth
+interrogating, then interrogate it.
+
+The page you are reading is the live one, with everything said before it above
+it and everything after it below, as a scrollback. Tap any turn to move onto it
+— then *it* becomes the page you can annotate, with the rest of the
+conversation rearranged around it. The whole conversation goes out each turn,
+not just your last line, and a `+ Always` standing instruction rides along as
+the system prompt.
+
+Small things that matter:
+
+- **Hold `Send`** to speak the message instead of typing it. The transcript
+  lands in the box so you can read it before it goes.
+- **`Stop`** ends a long answer and keeps whatever had arrived — it is a page
+  like any other, so you can mark it up or just carry on from there.
+- A turn that fails leaves nothing behind, and hands your message back to the
+  box rather than making you retype it.
+- Enter sends on a keyboard; on a phone Enter is a new line and the button
+  sends.
+
+`Ask` and the message box are the two ways to ask, and they do different jobs:
+`Ask` answers the notes in the sheet, the box says something new. Both land in
+the same thread.
 
 ## Connecting a model
 
@@ -169,4 +211,4 @@ your keyboard's own dictation key still works in that box.
 There is no server and no account. Threads are autosaved to `localStorage`, and
 moving one between devices means exporting it. Your text leaves the browser only
 when you send it somewhere: onto the clipboard when you press `Copy prompt`, or
-to OpenRouter when you press `Ask`.
+to OpenRouter when you press `Ask` or send a message.

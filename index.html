@@ -651,6 +651,92 @@
   }
   .mnote{cursor:default}
 
+  /* ---------- what was said before ----------
+     A conversation is already a shape this app has: the path from the original
+     down to the page you are on is what was said, in order. So the reader puts
+     it above the live page, the way a chat shows its scrollback, and the page
+     itself stays the one surface you can mark up. */
+  .back{margin:0 0 2.4em}
+  .back.fwd{margin:2.6em 0 0}
+  .turn{
+    display:block;width:100%;text-align:left;padding:0;margin:0 0 1.6em;
+    background:none;border:0;cursor:pointer;
+  }
+  .turn .tw{
+    display:block;margin-bottom:5px;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  }
+  .turn.mine .tw{color:var(--mark)}
+  .turn .tt{
+    display:block;position:relative;overflow:hidden;
+    padding-left:16px;border-left:3px solid var(--rule);
+    font-family:"Newsreader",Georgia,serif;font-size:15px;line-height:1.72;
+    color:var(--muted);white-space:pre-wrap;word-break:break-word;
+  }
+  .turn.mine .tt{border-left-color:var(--mark);color:var(--ink)}
+  .turn:hover .tt{border-left-color:var(--ink)}
+  /* A long turn is trimmed rather than allowed to bury the live page. Tapping
+     opens it in full, where it can be marked up like anything else. */
+  .turn .tt.long{max-height:17em}
+  .turn .tt.long::after{
+    content:"";position:absolute;left:0;right:0;bottom:0;height:5em;
+    background:linear-gradient(to bottom,rgba(233,236,242,0),var(--paper));
+  }
+  @media (prefers-color-scheme: dark){
+    .turn .tt.long::after{background:linear-gradient(to bottom,rgba(18,23,31,0),var(--paper))}
+  }
+  .turn .more{
+    display:block;margin-top:6px;
+    font-family:"Newsreader",Georgia,serif;font-size:12px;color:var(--mark);
+  }
+  /* The live page is a turn as well; it just happens to be the one you can
+     mark up, so it keeps the reader's own type rather than the scrollback's. */
+  .nowwho{
+    font-family:"Newsreader",Georgia,serif;font-size:11px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 .55em;
+  }
+  .nowwho.mine{color:var(--mark)}
+
+  /* An answer still arriving is plain text with a cursor on the end: there is
+     nothing to annotate until the sentence it belongs to exists. */
+  .reader.live p{user-select:text;-webkit-user-select:text}
+  .caret{
+    display:inline-block;width:.46em;height:.95em;vertical-align:-.1em;
+    margin-left:.08em;background:var(--mark);animation:blink 1.05s steps(2) infinite;
+  }
+  @keyframes blink{50%{opacity:0}}
+
+  /* ---------- the message box ----------
+     The other way in. Notes act on something already written; this acts on
+     nothing, which is what you need for the first thing you say and for
+     everything that isn't about a particular phrase. */
+  .composer{
+    position:fixed;left:0;right:0;bottom:106px;z-index:45;
+    max-width:640px;margin:0 auto;
+    background:var(--paper);border-top:1px solid var(--rule);
+    padding:9px 16px 11px;
+    display:none;gap:9px;align-items:flex-end;
+  }
+  .composer.on{display:flex}
+  /* Nothing beneath it once the notes sheet is stowed, and out of the way
+     entirely while the sheet is open and notes are the work in hand. */
+  body:has(.sheet.empty) .composer{bottom:0}
+  body:has(.sheet.open) .composer{display:none}
+  body:has(.composer.on) .paste{padding-bottom:112px}
+  .composer textarea{
+    flex:1;min-width:0;height:42px;max-height:8.5em;resize:none;overflow-y:auto;
+    padding:10px 13px;border:1px solid var(--rule);border-radius:var(--r-m);
+    background:var(--card);color:var(--ink);
+    font-family:"Newsreader",Georgia,serif;font-size:15px;line-height:1.45;
+    transition:border-color .15s;
+  }
+  .composer textarea:focus{outline:none;border-color:var(--ink)}
+  .composer textarea::placeholder{color:var(--ghost)}
+  #saysend{flex:0 0 auto;padding-bottom:12px}
+  #saysend.stop{color:var(--mark)}
+
   /* how much you are about to paste somewhere */
   .psize{
     font-family:"Newsreader",Georgia,serif;font-size:11.5px;color:var(--muted);
@@ -700,7 +786,7 @@
 
   <div class="head">
     <h1>Talk in the text</h1>
-    <p>Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.</p>
+    <p id="headnote">Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.</p>
   </div>
 
   <main class="scroller" id="scroller">
@@ -785,6 +871,12 @@
     <div id="notelist"></div>
     <div class="previewbox" id="previewbox"><textarea class="preview" id="preview" spellcheck="false"></textarea></div>
   </div>
+</div>
+
+<div class="composer" id="composer">
+  <textarea id="saytxt" rows="1" placeholder="Ask anything&#8230;" spellcheck="false"
+            aria-label="Write a message"></textarea>
+  <button class="mini solid" id="saysend">Send</button>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -952,11 +1044,30 @@
     return map;
   }
 
-  function pageLabel(id,n){
+  /* What to call a page. A note is the obvious name for the page it drew out;
+     a turn in a conversation is named by what was said. The reader, the map,
+     the export and the prompt all ask here, so they all read the same way. */
+  function titleOf(id,len){
     var x=nodes[id];
     if(!x) return "a page";
-    return x.parents.length?trim(x.note,40):"the original text";
+    len=len||40;
+    if(x.mine) return trim(x.text,len);
+    if(!x.parents.length) return "the original text";
+    if(x.note) return trim(x.note,len);
+    var up=nodes[firstParent(x)];
+    return up&&up.mine?trim(up.text,len):"a reply";
   }
+
+  /* How a page came about, as a phrase a model can read. */
+  function cameFrom(x,len){
+    if(!x||!x.parents.length) return "The original text:";
+    if(x.mine) return "I said:";
+    var up=nodes[firstParent(x)];
+    if(up&&up.mine) return "In answer to my message \u201C"+trim(up.text,len||80)+"\u201D:";
+    return "In reply to my note \u201C"+trim(x.note,len||80)+"\u201D:";
+  }
+
+  function pageLabel(id,n){ return titleOf(id,40); }
 
   /* A note about the page as a whole rather than a run of words in it — "this
      reply is too hedged", "you never answered the second objection". Everything
@@ -984,8 +1095,12 @@
       id:id, parents:ps, text:text,
       notes:[], kids:[],
       quote:(meta&&meta.quote)||"", note:(meta&&meta.note)||"",
-      s:(meta?meta.s:0), e:(meta?meta.e:0), para:(meta?meta.para:0),
+      s:(meta&&meta.s)|0, e:(meta&&meta.e)|0, para:(meta&&meta.para)|0,
       whole:!!(meta&&meta.whole), source:(meta&&meta.source)||"",
+      /* A page you typed rather than one drawn out of a note. It is what
+         separates your turn from the model's when the thread is read back as
+         a conversation. */
+      mine:!!(meta&&meta.mine),
       merge:ps.length>1, status:"open"
     };
     ps.forEach(function(pid){ if(nodes[pid]) nodes[pid].kids.push(id); });
@@ -1035,7 +1150,7 @@
     var crumb=$("crumb");
     if(n&&n.parents.length){
       crumb.hidden=false;
-      crumb.textContent="\u21B3 "+(n.note?trim(n.note,46):"reply");
+      crumb.textContent=(n.mine?"\u2710 ":"\u21B3 ")+titleOf(n.id,46);
     } else crumb.hidden=true;
   }
 
@@ -1191,7 +1306,11 @@
       for(var k=n.s;k<=n.e;k++) annotated[k]=true;
     });
     var n=node();
-    var answered=(n?n.kids:[]).filter(function(k){ return nodes[k]&&!nodes[k].merge; })
+    /* The conversation carrying on below is drawn as turns, not as a reply
+       card, so a thread you talked your way into reads the same going forward
+       as it does going back. */
+    var onward=(n&&isChat(n.id)&&nextTurn(n)||{}).id;
+    var answered=(n?n.kids:[]).filter(function(k){ return nodes[k]&&!nodes[k].merge&&k!==onward; })
       .sort(function(a,b){
         return (nodes[a].para-nodes[b].para) || (nodes[a].s-nodes[b].s);
       });
@@ -1226,7 +1345,7 @@
               (collapsed[id]?"Show":"Hide")+' this reply">'+
               (collapsed[id]?"\u25B8":"\u25BE")+"</button>"+
             '<button class="rhead" data-node="'+m.id+'">'+
-              (label?'<span class="rnum">'+label+"</span> ":"")+esc(m.note||"Reply")+
+              (label?'<span class="rnum">'+label+"</span> ":"")+esc(titleOf(m.id,64))+
               (meta.length?'<span class="rmeta">'+esc(meta.join(" \u00B7 "))+"</span>":"")+
             "</button>";
       if(m.quote) h+='<span class="rquote">\u201C'+esc(m.quote)+"\u201D</span>";
@@ -1247,8 +1366,9 @@
 
 
     var html="";
-    if(n&&n.parents.length){
-      var up=nodes[firstParent(n)];
+    var said=scrollback(n);
+    if(said) html+=said+nowWho(n);
+    else if(n&&n.parents.length){
       html+='<div class="pagehead">'+
               '<div class="ctx">'+
                 (n.quote?'<span class="cq">\u201C'+esc(n.quote)+'\u201D</span>':"")+
@@ -1292,6 +1412,8 @@
       html+='<div class="mergehead">Replies</div>';
       html+=answered.map(function(k,i){ return branch(k,0,i+1); }).join("");
     }
+
+    html+=forward(n);
 
     var merged=(n?n.kids:[]).filter(function(k){ return nodes[k]&&nodes[k].merge; });
     if(merged.length){
@@ -1399,8 +1521,9 @@
       render();
       return;
     }
-    var head=t.closest?t.closest(".rhead"):null;
+    var head=t.closest?t.closest(".rhead,.turn"):null;
     if(head&&head.dataset.node){
+      if(liveId!=null) return;   /* an answer is still arriving into this page */
       focusNode(head.dataset.node);
       return;
     }
@@ -1972,7 +2095,7 @@
     Object.keys(nodes).forEach(function(id){
       var x=nodes[id];
       if(!x.parents.length || id===skipId) return;
-      lines.push(statusLine(x)+": "+trim(x.note,90));
+      lines.push(statusLine(x)+": "+titleOf(x.id,90));
     });
     Object.keys(nodes).forEach(function(id){
       if(id===skipId) return;   // listed in full further down; no need to repeat
@@ -1986,10 +2109,13 @@
 
   function provenance(n){
     if(!n||!n.parents.length) return "";
-    var out="This page was written in reply to a note I left"+
-            (n.quote?" on: \u201C"+n.quote+"\u201D":"")+"\n";
-    out+="My note was: "+n.note+"\n\n";
-    return out;
+    var up=nodes[firstParent(n)];
+    if(n.mine) return "I wrote this page myself.\n\n";
+    if(up&&up.mine) return "This page was written in answer to what I said: \u201C"+
+                           trim(up.text,300)+"\u201D\n\n";
+    return "This page was written in reply to a note I left"+
+           (n.quote?" on: \u201C"+n.quote+"\u201D":"")+"\n"+
+           "My note was: "+n.note+"\n\n";
   }
 
   function contextBlock(){
@@ -2002,8 +2128,7 @@
       out+="--- HOW WE GOT HERE ---\n";
       path.slice(0,-1).forEach(function(id,i){
         var x=nodes[id];
-        out+="["+(i+1)+"] "+(x.parents.length?"In reply to my note \u201C"+trim(x.note,80)+"\u201D:":"The original text:")+
-             "\n"+x.text+"\n\n";
+        out+="["+(i+1)+"] "+cameFrom(x)+"\n"+x.text+"\n\n";
       });
       out+="--- END ---\n\n";
     }
@@ -2016,7 +2141,7 @@
         out+="--- OTHER BRANCHES ---\n";
         others.forEach(function(id){
           var x=nodes[id];
-          out+=(x.note?"In reply to \u201C"+trim(x.note,80)+"\u201D:":"")+"\n"+trim(x.text,700)+"\n\n";
+          out+=(x.parents.length?cameFrom(x):"")+"\n"+trim(x.text,700)+"\n\n";
         });
         out+="--- END ---\n\n";
       }
@@ -2038,7 +2163,8 @@
     var x=nodes[id];
     if(!x||!x.parents.length) return "the original text";
     var up=firstParent(x), at=numOfPage[up];
-    return "written in reply to my note \u201C"+trim(x.note,90)+"\u201D"+
+    return (x.mine?"something I said: \u201C"+trim(x.text,90)+"\u201D"
+                  :cameFrom(x,90).replace(/^In (reply|answer) to /,"written in reply to ").replace(/:$/,""))+
            (at?" on page "+at:"")+
            (x.parents.length>1?", which answered a note across "+x.parents.length+" pages":"");
   }
@@ -2240,7 +2366,7 @@
       var q=document.createElement("div"); q.className="quote";
       if(tree){
         q.textContent=n.ids.length+" page"+(n.ids.length>1?"s":"")+": "+n.ids.map(function(id){
-          var x=nodes[id]; return x&&x.note?trim(x.note,26):"the original";
+          var x=nodes[id]; return x?titleOf(id,26):"the original";
         }).join(" + ");
       } else if(isPageNote(n)){
         q.className="quote whole";
@@ -2501,32 +2627,51 @@
     }catch(e){ toast("Couldn't remember that in this browser"); }
   }
 
-  /* One round trip. The failures are turned into sentences here rather than at
-     the call site, because what you need to hear differs by status and by
-     nothing else: 401 is the key, 402 is credit, 429 is the free tier's
-     ceiling, and anything else is worth quoting back verbatim. */
-  function orAsk(model,prompt,signal){
+  function orHeaders(){
+    return {
+      "Content-Type":"application/json",
+      "Authorization":"Bearer "+apiKey,
+      "HTTP-Referer":/^https?:/.test(location.origin||"")?location.origin:"https://meristem.app",
+      "X-Title":"Meristem"
+    };
+  }
+
+  /* Failures are turned into sentences here rather than at the call site,
+     because what you need to hear differs by status and by nothing else: 401
+     is the key, 402 is credit, 429 is the free tier's ceiling, and anything
+     else is worth quoting back verbatim. */
+  function orRefused(res,body){
+    var data=null;
+    try{ data=JSON.parse(body); }catch(e){}
+    var said=data&&data.error&&(data.error.message||data.error.code);
+    if(res.status===401) return new Error("OpenRouter wouldn't take that key");
+    if(res.status===402) return new Error("That model needs credit on OpenRouter");
+    if(res.status===429) return new Error("Rate limited — free models cap how often you can ask");
+    return new Error(said?String(said).slice(0,180):"OpenRouter answered "+res.status);
+  }
+
+  function orUnreachable(err){
+    if(err&&err.name==="AbortError") throw err;
+    /* Opened straight off the disk the page has no origin to present, and the
+       browser refuses the request before it leaves. Worth saying, since
+       file:// is a route the README recommends for the microphone. */
+    if(location.protocol==="file:")
+      throw new Error("A page opened from a file can't reach OpenRouter — serve it over http, or use Copy prompt");
+    throw new Error("Couldn't reach OpenRouter — check the connection");
+  }
+
+  /* One round trip, waited out in full. Takes a conversation rather than a
+     lone prompt, because a chat turn is several messages and a notes round is
+     the degenerate case of one. */
+  function orAsk(model,messages,signal){
     return fetch(OR_CHAT,{
-      method:"POST",
-      signal:signal,
-      headers:{
-        "Content-Type":"application/json",
-        "Authorization":"Bearer "+apiKey,
-        "HTTP-Referer":/^https?:/.test(location.origin||"")?location.origin:"https://meristem.app",
-        "X-Title":"Meristem"
-      },
-      body:JSON.stringify({model:model,messages:[{role:"user",content:prompt}]})
+      method:"POST", signal:signal, headers:orHeaders(),
+      body:JSON.stringify({model:model,messages:messages})
     }).then(function(res){
       return res.text().then(function(body){
         var data=null;
         try{ data=JSON.parse(body); }catch(e){}
-        var said=data&&data.error&&(data.error.message||data.error.code);
-        if(!res.ok||said){
-          if(res.status===401) throw new Error("OpenRouter wouldn't take that key");
-          if(res.status===402) throw new Error("That model needs credit on OpenRouter");
-          if(res.status===429) throw new Error("Rate limited — free models cap how often you can ask");
-          throw new Error(said?String(said).slice(0,180):"OpenRouter answered "+res.status);
-        }
+        if(!res.ok||(data&&data.error)) throw orRefused(res,body);
         var choice=(data&&data.choices&&data.choices[0])||null;
         var msg=(choice&&choice.message)||{};
         var text=msg.content;
@@ -2540,15 +2685,13 @@
         }
         return text;
       });
-    },function(err){
-      if(err&&err.name==="AbortError") throw err;
-      /* Opened straight off the disk the page has no origin to present, and
-         the browser refuses the request before it leaves. Worth saying, since
-         file:// is a route the README recommends for the microphone. */
-      if(location.protocol==="file:")
-        throw new Error("A page opened from a file can't reach OpenRouter — serve it over http, or use Copy prompt");
-      throw new Error("Couldn't reach OpenRouter — check the connection");
-    });
+    },orUnreachable);
+  }
+
+  /* A notes round or a Suggest round is one message; this keeps those call
+     sites reading the way they did. */
+  function justAsk(model,prompt,signal){
+    return orAsk(model,[{role:"user",content:prompt}],signal);
   }
 
   /* A round in flight. One at a time: the answers land on the notes that are
@@ -2558,7 +2701,9 @@
 
   function askStatus(){
     var el=$("askstat");
-    if(!orFlight){ el.hidden=true; el.textContent=""; return; }
+    /* A chat turn shows itself in the reader, a word at a time; a second
+       running commentary in the sheet would only be in the way. */
+    if(!orFlight||orFlight.quiet){ el.hidden=true; el.textContent=""; return; }
     var secs=Math.round((Date.now()-orFlight.started)/1000);
     var of=orFlight.total>1?" · "+orFlight.done+" of "+orFlight.total+" back":"";
     el.hidden=false;
@@ -2570,13 +2715,17 @@
       " is writing"+of+" · "+secs+"s · tap Asking to stop"));
   }
 
-  function beginFlight(label,total){
+  function beginFlight(label,total,quiet){
     orFlight={
       ctl:window.AbortController?new AbortController():null,
       label:label, total:total, done:0, started:Date.now(), timer:null
     };
     orFlight.timer=setInterval(askStatus,1000);
-    sheetEl.classList.add("open"); chevEl.innerHTML="▼";
+    /* A notes round is watched from the sheet, so the sheet comes up. A chat
+       turn is watched in the reader, where the answer is already appearing —
+       opening the sheet over it would cover both it and the message box. */
+    orFlight.quiet=!!quiet;
+    if(!quiet){ sheetEl.classList.add("open"); chevEl.innerHTML="▼"; }
     askStatus(); syncAsk();
   }
 
@@ -2624,7 +2773,7 @@
     var got=[], errs=[];
 
     Promise.all(out.map(function(m){
-      return orAsk(m,txt,sig).then(function(reply){
+      return justAsk(m,txt,sig).then(function(reply){
         got.push({model:m,text:reply});
         if(orFlight===mine){ orFlight.done++; askStatus(); }
       },function(err){
@@ -2655,7 +2804,7 @@
     var m=orModels[0];
     beginFlight(shortModel(m),1);
     var mine=orFlight;
-    orAsk(m,txt,orFlight.ctl?orFlight.ctl.signal:undefined).then(function(reply){
+    justAsk(m,txt,orFlight.ctl?orFlight.ctl.signal:undefined).then(function(reply){
       if(orFlight!==mine) return;
       endFlight();
       var sugg=parseSuggestions(reply);
@@ -2674,6 +2823,366 @@
       toast(err.message);
     });
   }
+
+  /* ---------------- talking ----------------
+     Notes act on something already written. That is the whole idea, and it
+     leaves exactly one thing impossible: saying the first thing, or saying
+     anything that isn't about a particular phrase. Until now the answer was
+     "paste some prose first", which is a strange thing to ask of someone who
+     only wants to put a question.
+
+     So: a message box. What you type becomes a page, the answer becomes its
+     child, and a conversation is an ordinary branch of the same tree — it
+     shows up in the map, in Read all, in an export, and any line of it can be
+     marked up the moment it exists. Chat isn't a second mode alongside
+     annotation; it is the way into it. Talk until a reply says something worth
+     interrogating, then mark that reply up and the thread branches out of your
+     marks exactly as it always did. */
+
+  /* What was said, in order, from the original down to this page. A page you
+     typed is your turn; a page a model wrote is its turn; and the note that
+     drew a reply out is the turn that asked for it, so it goes in front of the
+     answer it produced. */
+  function turnsFor(id){
+    var out=[];
+    pathTo(id).forEach(function(pid,i){
+      var x=nodes[pid];
+      if(!x||!x.text.trim()) return;
+      if(x.mine){ out.push({role:"user",content:x.text}); return; }
+      /* The original is material you brought, not something anyone said. */
+      if(!i){ out.push({role:"user",content:"Here is the text I'm working from.\n\n"+x.text}); return; }
+      if(x.note) out.push({role:"user",content:(x.quote?"About “"+x.quote+"”: ":"")+x.note});
+      out.push({role:"assistant",content:x.text});
+    });
+    return out;
+  }
+
+  /* Standing instructions are a system prompt and have been all along, so that
+     is where they go. Consecutive turns in one role are folded together: some
+     models refuse two of the same in a row. */
+  function chatMessages(id){
+    var raw=turnsFor(id), out=[];
+    raw.forEach(function(m){
+      var last=out[out.length-1];
+      if(last&&last.role===m.role) last.content+="\n\n"+m.content;
+      else out.push({role:m.role,content:m.content});
+    });
+    var sys=standing.map(function(x){ return x.text; }).filter(Boolean);
+    if(sys.length) out.unshift({role:"system",content:sys.join("\n")});
+    return out;
+  }
+
+  /* Streamed rather than waited out. A chat that prints nothing for twenty
+     seconds reads as broken, and on a free model twenty seconds is ordinary. */
+  var canStream=!!(window.ReadableStream&&window.TextDecoder);
+
+  function orStream(model,messages,signal,onText){
+    return fetch(OR_CHAT,{
+      method:"POST", signal:signal, headers:orHeaders(),
+      body:JSON.stringify({model:model,messages:messages,stream:true})
+    }).then(function(res){
+      if(!res.ok||!res.body||!res.body.getReader)
+        return res.text().then(function(b){ throw orRefused(res,b); });
+
+      var reader=res.body.getReader(), dec=new TextDecoder(), buf="", text="";
+      function pump(){
+        return reader.read().then(function(chunk){
+          if(chunk.done) return text;
+          buf+=dec.decode(chunk.value,{stream:true});
+          var cut;
+          while((cut=buf.indexOf("\n"))>=0){
+            var line=buf.slice(0,cut).trim();
+            buf=buf.slice(cut+1);
+            /* A line opening with ':' is a keep-alive comment, not data. */
+            if(!line||line.charAt(0)===":"||line.slice(0,5)!=="data:") continue;
+            var payload=line.slice(5).trim();
+            if(payload==="[DONE]") return text;
+            var d=null;
+            try{ d=JSON.parse(payload); }catch(e){ continue; }
+            if(d.error) throw new Error(String(d.error.message||d.error).slice(0,180));
+            var bit=d.choices&&d.choices[0]&&d.choices[0].delta&&d.choices[0].delta.content;
+            if(bit){ text+=bit; onText(text); }
+          }
+          return pump();
+        });
+      }
+      return pump().then(function(t){
+        t=(t||"").trim();
+        if(!t) throw new Error("Nothing came back");
+        return t;
+      });
+    },orUnreachable);
+  }
+
+  /* ---- an answer as it arrives ---- */
+  var liveId=null, liveText="", liveTimer=null;
+
+  /* Repainting on every token would re-lay the page dozens of times a second
+     for nothing the eye can use. */
+  function paintSoon(){
+    if(liveTimer) return;
+    liveTimer=setTimeout(function(){
+      liveTimer=null;
+      if(!livePage()) return;
+      var stick=nearBottom();
+      renderLive();
+      if(stick) toBottom();
+    },70);
+  }
+
+  /* Painting stops the moment the reader is somewhere else — navigated away,
+     put into edit mode, or cleared by New text. The answer still finishes and
+     still lands on its own page; it just stops redrawing a surface that is no
+     longer showing it. */
+  function livePage(){
+    return liveId!=null && nodes[liveId] && curId===liveId &&
+           !readerEl.classList.contains("editing");
+  }
+  function nearBottom(){
+    var s=$("scroller");
+    return s.scrollHeight-s.scrollTop-s.clientHeight<150;
+  }
+  function toBottom(){ $("scroller").scrollTop=$("scroller").scrollHeight; }
+
+  function renderLive(){
+    if(!livePage()) return;
+    var html=scrollback(nodes[liveId])+nowWho(nodes[liveId]);
+    var paras=liveText.replace(/\r/g,"").split(/\n\s*\n/);
+    paras.forEach(function(t,i){
+      html+="<p>"+esc(t)+(i===paras.length-1?'<span class="caret"></span>':"")+"</p>";
+    });
+    readerEl.classList.add("live");
+    readerEl.innerHTML=html;
+  }
+
+  function endLive(){
+    if(liveTimer){ clearTimeout(liveTimer); liveTimer=null; }
+    liveId=null; liveText="";
+    readerEl.classList.remove("live");
+  }
+
+  /* Put a finished answer where a chat puts it — at the top of the screen with
+     the scrollback above it — rather than at the beginning of a conversation
+     you have already read. */
+  function toLive(){
+    var back=readerEl.querySelector(".back");
+    var first=back&&back.nextElementSibling;
+    $("scroller").scrollTop=first?Math.max(0,first.offsetTop-14):0;
+  }
+
+  /* Undo a turn that came to nothing. Only ever called on a page made moments
+     ago, so it has no notes and no children to worry about. */
+  function dropPage(id){
+    var x=nodes[id];
+    if(!x) return;
+    x.parents.forEach(function(pid){
+      if(nodes[pid]) nodes[pid].kids=nodes[pid].kids.filter(function(k){ return k!==id; });
+    });
+    delete nodes[id];
+  }
+
+  function sendMessage(say){
+    say=(say||"").trim();
+    if(!say) return;
+    if(orFlight){ toast("Still waiting on the last one"); return; }
+    if(!orConnected()){ openKey(); return; }
+
+    var model=orModels[0], back=curId;
+    /* Whatever is open is what is being talked about, so the message hangs off
+       it. On a blank start there is nothing yet and it becomes the root: the
+       thread begins with something you said. */
+    var mineId=makeNode(say,back,{mine:true});
+    var replyId=makeNode("",mineId,{source:shortModel(model)});
+
+    beginFlight(shortModel(model),1,true);
+    var mine=orFlight, sig=orFlight.ctl?orFlight.ctl.signal:undefined;
+
+    liveId=replyId; liveText="";
+    focusNode(replyId);
+    renderLive(); toBottom(); syncSay();
+
+    var msgs=chatMessages(mineId);
+    (canStream
+      ? orStream(model,msgs,sig,function(t){ liveText=t; paintSoon(); })
+      : orAsk(model,msgs,sig)
+    ).then(function(text){
+      if(orFlight===mine) endFlight();
+      endLive();
+      /* New text, or a thread loaded over the top, can retire the page an
+         answer was headed for while it was still being written. */
+      if(!nodes[replyId]) return;
+      /* Stopping can end the stream cleanly rather than tearing it, in which
+         case this is the success path carrying a half-written answer. Keep it
+         either way: cancelling should cost you nothing that had arrived. */
+      land(replyId,text);
+    },function(err){
+      var quit=!!(err&&err.name==="AbortError"), partial=liveText.trim();
+      if(orFlight===mine) endFlight();
+      endLive();
+      if(!nodes[replyId]||!nodes[mineId]){ syncSay(); return; }
+
+      if(quit&&partial){
+        /* Stopped part-way: what arrived is worth keeping, and it is a page
+           like any other, so it can be marked up or followed straight on. */
+        land(replyId,partial);
+        return;
+      }
+      /* Nothing came of the turn, so nothing is left behind — and the message
+         goes back in the box rather than being retyped. */
+      dropPage(replyId); dropPage(mineId);
+      $("saytxt").value=say; autogrow();
+      if(back&&nodes[back]) focusNode(back);
+      else if(Object.keys(nodes).length) focusNode(rootId());
+      else { curId=null; words=[]; TOK=[]; readerEl.innerHTML=""; refresh(); syncNav(); toEditor(); }
+      if(!quit) toast(err.message);
+      syncSay();
+    });
+  }
+
+  /* An answer arrives on its page whether or not you stayed to watch it. You
+     are only carried back to it if you never left. */
+  function land(id,text){
+    nodes[id].text=text;
+    if(curId===id||!nodes[curId]){ focusNode(id); toLive(); }
+    else { render(); refresh(); syncNav(); }
+    syncSay();
+  }
+
+  /* ---- the scrollback ---- */
+
+  /* Only threads with talking in them: a thread made of notes alone keeps the
+     note header it has always had. */
+  function isChat(id){
+    return pathTo(id).some(function(p){ return nodes[p]&&nodes[p].mine; });
+  }
+
+  function turnHtml(who,text,mine,id){
+    var long=text.length>620;
+    return '<button class="turn'+(mine?" mine":"")+'" data-node="'+id+'">'+
+             '<span class="tw">'+esc(who)+"</span>"+
+             '<span class="tt'+(long?" long":"")+'">'+esc(text)+"</span>"+
+             (long?'<span class="more">Tap to read it whole</span>':"")+
+           "</button>";
+  }
+
+  function nowWho(n){
+    if(!n||!n.parents.length||!isChat(n.id)) return "";
+    return '<div class="nowwho'+(n.mine?" mine":"")+'">'+
+           esc(n.mine?"You":(n.source||"Reply"))+"</div>";
+  }
+
+  /* The next turn down the spine: the answer to what you said, or the message
+     you sent after reading an answer. A page that came out of a note is not on
+     this spine — it is a branch, and it keeps its reply card, because that is a
+     different shape of thing. */
+  function nextTurn(x){
+    var out=null;
+    (x?x.kids:[]).forEach(function(k){
+      var kid=nodes[k];
+      if(out||!kid||kid.merge) return;
+      if(x.mine ? (!kid.mine&&!kid.note) : kid.mine) out=kid;
+    });
+    return out;
+  }
+
+  /* The rest of the conversation, below the page you are on, drawn as the same
+     turns the scrollback draws above it. Going back into a thread you talked
+     your way through then reads forwards and backwards alike. */
+  function forward(n){
+    if(!n||!isChat(n.id)) return "";
+    var h="", x=n, guard=0;
+    while(x&&guard++<400){
+      x=nextTurn(x);
+      if(!x) break;
+      h+=turnHtml(x.mine?"You":(x.source||"Reply"),x.text,x.mine,x.id);
+    }
+    return h?'<div class="back fwd">'+h+"</div>":"";
+  }
+
+  function scrollback(n){
+    if(!n||!n.parents.length||!isChat(n.id)) return "";
+    var path=pathTo(n.id);
+    path.pop();                        /* this page is the reading surface */
+    if(!path.length) return "";
+    var h='<div class="back">';
+    path.forEach(function(pid,i){
+      var x=nodes[pid];
+      if(!x) return;
+      /* A reply that answered a note shows the note in front of it: that was
+         the turn that asked, even though it was made by marking words up. */
+      if(!x.mine&&x.note) h+=turnHtml("You · note",x.note,true,x.id);
+      h+=turnHtml(x.mine?"You":(!i&&!x.note?"The text":(x.source||"Reply")),
+                  x.text,x.mine,x.id);
+    });
+    return h+"</div>";
+  }
+
+  /* ---- the box ---- */
+  function autogrow(){
+    var t=$("saytxt");
+    t.style.height="auto";
+    t.style.height=Math.min(t.scrollHeight,
+      Math.round(parseFloat(getComputedStyle(t).fontSize||"15")*8.5))+"px";
+  }
+
+  function syncSay(){
+    var box=$("composer"), send=$("saysend");
+    box.classList.toggle("on",orConnected()&&!inTree());
+    var busy=!!orFlight&&liveId!=null;
+    send.textContent=busy?"Stop":"Send";
+    send.classList.toggle("stop",busy);
+    send.title=busy?"Stop, and keep whatever has arrived"
+                   :"Send. Hold it to speak instead.";
+    $("saytxt").placeholder=curId?"Say something about this…":"Ask anything…";
+    var head=$("headnote");
+    if(head) head.textContent=orConnected()
+      ? "Ask a question below, or paste something to read — then hold any word to speak a note about it, and the answer branches out of your mark."
+      : "Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.";
+  }
+
+  function saySend(){
+    if(orFlight&&liveId!=null){ cancelFlight(); return; }
+    var t=$("saytxt"), v=t.value;
+    if(!v.trim()){ t.focus(); return; }
+    t.value=""; autogrow();
+    sendMessage(v);
+  }
+
+  holdToSpeak($("saysend"),function(voice){
+    if(!voice||!SR){ saySend(); return; }
+    if(orFlight&&liveId!=null){ cancelFlight(); return; }
+    /* Dictation lands in the box rather than going straight out: a misheard
+       note can be fixed in the sheet, but a sent message is spent. */
+    speakInto($("saytxt"));
+  });
+
+  function speakInto(box){
+    heard=""; capTxt.textContent="";
+    capEl.classList.add("on"); capEl.style.bottom="165px";
+    if(navigator.vibrate) navigator.vibrate(8);
+    startListening();
+    var stop=function(){
+      document.removeEventListener("pointerup",stop);
+      capEl.classList.remove("on");
+      if(listening&&rec){ try{ rec.stop(); }catch(e){} }
+      setTimeout(function(){
+        var said=heard.trim();
+        if(!said) return;
+        box.value=(box.value?box.value.replace(/\s*$/,"")+" ":"")+said;
+        autogrow(); box.focus();
+      },260);
+    };
+    document.addEventListener("pointerup",stop);
+  }
+
+  $("saytxt").addEventListener("input",autogrow);
+  $("saytxt").addEventListener("keydown",function(e){
+    /* On a phone Enter is how you get a new line and the button is how you
+       send; on a keyboard it is the other way round. */
+    if(isMobile||e.key!=="Enter"||e.shiftKey||e.isComposing) return;
+    e.preventDefault();
+    saySend();
+  });
 
   function syncAsk(){
     var send=$("sendbar"), key=$("keybar"), ready=orConnected();
@@ -2694,6 +3203,7 @@
       : apiKey
         ? "The key is saved. Choose which model it should ask."
         : "Add an OpenRouter key and Meristem can ask for you, instead of you carrying the prompt somewhere";
+    syncSay();
     var cb=$("connectbtn");
     if(cb) cb.textContent=ready&&orModels.length>1
       ? label+" · "+shortModel(orModels[0])+" first"
@@ -3055,7 +3565,7 @@
         var n=nodes[id];
         return {id:n.id,parents:n.parents,text:n.text,notes:n.notes,kids:n.kids,
                 quote:n.quote,note:n.note,s:n.s,e:n.e,para:n.para,
-                whole:!!n.whole,source:n.source||"",
+                whole:!!n.whole,source:n.source||"",mine:!!n.mine,
                 merge:!!n.merge,status:n.status||"open"};
       })
     };
@@ -3076,10 +3586,22 @@
         id:n.id, parents:Array.isArray(n.parents)?n.parents:[], text:n.text,
         notes:Array.isArray(n.notes)?n.notes:[], kids:[],
         quote:n.quote||"", note:n.note||"", s:n.s|0, e:n.e|0, para:n.para|0,
-        whole:!!n.whole, source:n.source||"",
+        whole:!!n.whole, source:n.source||"", mine:!!n.mine,
         merge:!!n.merge, status:n.status||"open"
       };
     });
+    /* An answer interrupted by a closed tab leaves an empty page behind. It was
+       never content, so it does not come back — unless something hangs off it,
+       in which case dropping it would orphan real work. */
+    var claimed={};
+    Object.keys(fresh).forEach(function(id){
+      (fresh[id].parents||[]).forEach(function(pid){ claimed[pid]=1; });
+    });
+    Object.keys(fresh).forEach(function(id){
+      var x=fresh[id];
+      if(!x.text.trim()&&x.parents.length&&!x.notes.length&&!claimed[id]) delete fresh[id];
+    });
+
     var ids=Object.keys(fresh);
     if(!ids.length) return null;
 
@@ -3364,7 +3886,7 @@
     order.forEach(function(id){
       var n=nodes[id];
       var level=Math.min(depth[id]+2,6);
-      var title=n.parents.length?n.note:"The original text";
+      var title=n.parents.length?titleOf(n.id,90):"The original text";
       out.push("");
       out.push(new Array(level+1).join("#")+" "+(title||"Reply"));
 
@@ -3858,7 +4380,9 @@
   function cardHTML(id){
     var n=nodes[id], full=!!expanded[id];
     var bits="";
-    if(n.note) bits+='<span class="tq">\u21B3 '+esc(full?n.note:trim(n.note,44))+"</span>";
+    if(n.parents.length)
+      bits+='<span class="tq">'+(n.mine?"\u2710 ":"\u21B3 ")+
+            esc(full&&n.note?n.note:titleOf(n.id,44))+"</span>";
     if(full&&n.quote) bits+='<span class="tanchor">\u201C'+esc(n.quote)+"\u201D</span>";
     bits+='<span class="tt">'+esc(full?n.text:trim(n.text,150))+"</span>";
     if(full) n.notes.forEach(function(nt){
@@ -4008,7 +4532,7 @@
             "A note may be about one page or about several at once.\n\n";
     used.forEach(function(id,i){
       var n=nodes[id];
-      out+="--- PAGE "+(i+1)+(n.note?" (written in reply to: \u201C"+n.note+"\u201D)":" (the original text)")+" ---\n"+
+      out+="--- PAGE "+(i+1)+" ("+cameFrom(n).replace(/:$/,"")+") ---\n"+
            n.text+"\n\n";
     });
     out+="--- MY NOTES ---\n";
@@ -4152,7 +4676,7 @@
     }
     var n=nodes[selId];
     if(!n){ $("tsel").textContent=""; $("treeopen").hidden=true; return; }
-    var label=n.parents.length?trim(n.note,60):"The original text";
+    var label=n.parents.length?titleOf(n.id,60):"The original text";
     $("tsel").textContent=label+(selId===curId?"  \u00B7 you are here":"");
     $("treeopen").hidden=(selId===curId);
   }
