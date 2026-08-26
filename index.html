@@ -570,6 +570,87 @@
   }
   .srcrow input:focus{outline:none;border-color:var(--ink)}
 
+  /* ---------- connecting a model ---------- */
+  .askrow{
+    flex:1 0 100%;order:99;margin:-3px 0 0;
+    font-family:"Newsreader",Georgia,serif;font-size:11.5px;line-height:1.5;color:var(--muted);
+  }
+  .askrow b{font-weight:500;color:var(--ink)}
+  #sendbar.busy{color:var(--mark)}
+  #keybar{color:var(--ink)}
+  #keybar.off{color:var(--muted)}
+  #keybar.named{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;font-weight:400;
+    max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  /* The card is the tallest in the app — a key, a filter and a list — so on a
+     short screen it scrolls inside itself rather than off the bottom. */
+  #keyin .card{max-height:88vh;overflow:auto;-webkit-overflow-scrolling:touch}
+  .keyblock{margin:0 0 16px}
+  .keyblock:last-of-type{margin-bottom:4px}
+  .fieldlab{
+    display:block;margin:0 0 5px;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  }
+  .field{
+    display:block;width:100%;padding:9px 11px;
+    border:1px solid var(--rule);border-radius:var(--r-s);
+    background:var(--paper);color:var(--ink);
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;
+  }
+  .field:focus{outline:none;border-color:var(--ink)}
+  .fieldnote{
+    margin:7px 0 0;
+    font-family:"Newsreader",Georgia,serif;font-size:11.5px;line-height:1.6;color:var(--muted);
+  }
+  .fieldnote a{color:var(--mark)}
+  .freerow{
+    display:flex;align-items:center;gap:10px;margin:9px 0 0;
+    font-family:"Newsreader",Georgia,serif;font-size:12px;color:var(--muted);
+  }
+  .freerow label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .freerow .mcount{margin-left:auto}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+  .chips:empty{margin:0}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;
+    padding:4px 5px 4px 10px;border:1px solid var(--rule);border-radius:var(--pill);
+    background:var(--paper);
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink);
+    word-break:break-all;
+  }
+  /* The first one is the one a single-model round goes to, and the only one
+     the map uses, so it is worth being able to see which it is. */
+  .chip.lead{border-color:var(--ink)}
+  .chip .x{
+    flex:0 0 auto;background:none;border:0;padding:0 3px;cursor:pointer;
+    font-family:inherit;font-size:13px;line-height:1;color:var(--muted);
+  }
+  .chip .x:hover{color:var(--mark)}
+  .mlist{
+    max-height:190px;overflow:auto;margin:10px 0 0;
+    border:1px solid var(--rule);border-radius:var(--r-s);background:var(--paper);
+    -webkit-overflow-scrolling:touch;
+  }
+  .mrow{
+    display:block;width:100%;text-align:left;padding:8px 11px;
+    background:none;border:0;border-bottom:1px solid var(--rule);cursor:pointer;
+  }
+  .mrow:last-child{border-bottom:0}
+  .mrow:hover{background:var(--hover)}
+  .mrow .id{
+    display:block;word-break:break-all;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--ink);
+  }
+  .mrow.on .id{color:var(--mark)}
+  .mrow .meta{
+    display:block;margin-top:2px;
+    font-family:"Newsreader",Georgia,serif;font-size:11px;color:var(--muted);
+  }
+  .mnote{cursor:default}
+
   /* how much you are about to paste somewhere */
   .psize{
     font-family:"Newsreader",Georgia,serif;font-size:11.5px;color:var(--muted);
@@ -631,6 +712,7 @@
         <button class="btn ghost" id="sampletree">Use sample tree</button>
         <button class="btn ghost" id="importbtn">Paste a thread</button>
         <button class="btn ghost" id="miccheck">Check mic</button>
+        <button class="btn ghost" id="connectbtn">Connect a model</button>
       </div>
       <p class="micnote" id="micnote" hidden></p>
     </div>
@@ -689,11 +771,14 @@
       <button class="mini" id="scopebar">All pages</button>
       <button class="mini" id="comparebar">Compare</button>
       <button class="mini" id="ctxbar">Context: path</button>
+      <button class="mini solid" id="sendbar" hidden>Ask</button>
+      <button class="mini off" id="keybar">Connect a model</button>
       <button class="mini solid" id="copybar">Copy prompt</button>
       <button class="mini" id="suggestbar" title="Ask a model which passages are worth interrogating">Suggest</button>
       <button class="mini" id="peekbar">Preview</button>
       <button class="mini" id="replybar">Paste reply</button>
       <span class="psize" id="psize" hidden></span>
+      <span class="askrow" id="askstat" role="status" aria-live="polite" hidden></span>
     </div>
   </div>
   <div class="sheetbody" id="sheetbody">
@@ -728,6 +813,36 @@
     <div class="row" style="margin-top:10px">
       <button class="btn" id="replysave">Attach replies</button>
       <button class="btn ghost" id="replycancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="typein" id="keyin" role="dialog" aria-modal="true" aria-labelledby="keyq">
+  <div class="card">
+    <p class="q" id="keyq">Give Meristem an OpenRouter key and it can ask the model itself — same prompt, same answers back beside the same notes, without the trip to another window.</p>
+
+    <div class="keyblock">
+      <label class="fieldlab" for="keytxt">API key</label>
+      <input class="field" id="keytxt" type="password" placeholder="sk-or-v1&#8230;" autocomplete="off" spellcheck="false">
+      <p class="fieldnote">Get a free one at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>. It stays in this browser, goes nowhere but OpenRouter, and is never written into a thread file or an export.</p>
+    </div>
+
+    <div class="keyblock">
+      <label class="fieldlab" for="modelq">Model</label>
+      <input class="field" id="modelq" type="text" placeholder="Search, or paste a model id&#8230;" autocomplete="off" spellcheck="false">
+      <p class="freerow">
+        <label><input type="checkbox" id="freeonly" checked> Free ones only</label>
+        <span class="mcount" id="mcount"></span>
+      </p>
+      <div class="chips" id="mchips"></div>
+      <div class="mlist" id="mlist"></div>
+      <p class="fieldnote mnote" id="mnote"></p>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="keysave">Save</button>
+      <button class="btn ghost" id="keyforget">Forget key</button>
+      <button class="btn ghost" id="keycancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -1684,18 +1799,25 @@
   /* Answers come back numbered against the basket, and the basket spans pages,
      so each answer has to be routed to the page its own note sits on. One
      pasted reply can therefore grow branches in several places at once. */
-  function attachReplies(raw,source){
+  /* `side` forces the side-by-side path whatever the Compare toggle says —
+     several models answering one round have nowhere else to land.
+
+     Returns false only when the reply was unreadable and nothing was done with
+     it, so a caller holding the only copy (the API path does) can put it
+     somewhere you can still see it. Declining the confirm below is a decision,
+     not a loss, and counts as handled. */
+  function attachReplies(raw,source,side){
     var parsed=parseReply(raw), map=parsed.answers;
     var list=noteEntries();
     var found=list.filter(function(e,i){ return map[String(i+1)]; }).length;
-    if(!found){ toast("No numbered answers found"); return; }
+    if(!found){ toast("No numbered answers found"); return false; }
     if(!parsed.fenced &&
        !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
-                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return true;
 
     var hit=0, kept=0, touched={};
 
-    if(compareMode){
+    if(compareMode||side){
       list.forEach(function(e,i){
         var ans=map[String(i+1)];
         if(!ans){ kept++; return; }
@@ -1707,7 +1829,7 @@
       render(); refresh();
       toast(hit+" answer"+(hit>1?"s":"")+" from "+(source||"that reply")+
             " — keep the ones you want");
-      return;
+      return true;
     }
 
     var drop={};
@@ -1729,6 +1851,7 @@
     var pages=Object.keys(touched).length;
     toast(hit+" attached"+(pages>1?" across "+pages+" pages":"")+
           (kept?", "+kept+" unanswered":""));
+    return true;
   }
 
   /* Promote one collected answer. The note stays while other answers are still
@@ -2248,7 +2371,7 @@
     if(back&&back.focus&&document.contains(back)) back.focus({preventScroll:true});
   }
   function openOverlays(){
-    return ["typein","importin","replyin"].map($).filter(function(el){
+    return ["typein","importin","replyin","keyin"].map($).filter(function(el){
       return el.classList.contains("on");
     });
   }
@@ -2322,6 +2445,435 @@
     openOverlay($("replyin"),on?$("replysrc"):$("replytxt"));
   }
 
+  /* ---------------- asking a model directly ----------------
+     Copy, carry, paste is the floor this app stands on: it works with any
+     model behind any interface, needs no account here and no network from this
+     page, and it stays exactly as it was. But it costs four gestures a round,
+     and by the fourth round that is most of what using the thing feels like.
+     With an OpenRouter key the same prompt goes out over fetch and the reply
+     comes back through the same two parsers the paste box uses — `Ask` is
+     `Copy prompt`, taking it somewhere, and `Paste reply` collapsed into one
+     tap. Nothing here replaces the paste path; it stops being the only one.
+
+     The key lives under its own storage key, never inside a thread, so
+     exporting or sending someone a thread cannot carry it out of the browser.
+     It is held in localStorage in the clear, which is what a page with no
+     server can do — anything running in this origin can read it, so it should
+     be a key you are willing to revoke. */
+  var OR_CHAT="https://openrouter.ai/api/v1/chat/completions";
+  var OR_LIST="https://openrouter.ai/api/v1/models";
+  var KEY_STORE="meristem.openrouter.v1";
+  var MODEL_CAP=4;
+
+  var apiKey="", orModels=[], draftModels=[];
+
+  function orConnected(){ return !!apiKey && orModels.length>0; }
+
+  /* The tail of the id is what tells two models apart at a glance; the vendor
+     prefix and the `:free` suffix are the same across most of a shortlist. */
+  function shortModel(id){
+    var s=String(id||"").split("/").pop().replace(/:free$/,"");
+    return s.length>22?s.slice(0,21)+"…":s;
+  }
+
+  function loadKey(){
+    var store=storage();
+    if(!store) return;
+    var raw;
+    try{ raw=store.getItem(KEY_STORE); }catch(e){ return; }
+    if(!raw) return;
+    var d=null;
+    try{ d=JSON.parse(raw); }catch(e){ return; }
+    if(!d||typeof d!=="object") return;
+    apiKey=typeof d.key==="string"?d.key.trim():"";
+    orModels=(Array.isArray(d.models)?d.models:[])
+      .filter(function(m){ return typeof m==="string"&&m.trim(); })
+      .map(function(m){ return m.trim(); })
+      .slice(0,MODEL_CAP);
+  }
+
+  function saveKey(){
+    var store=storage();
+    if(!store) return;
+    try{
+      if(!apiKey&&!orModels.length) store.removeItem(KEY_STORE);
+      else store.setItem(KEY_STORE,JSON.stringify({key:apiKey,models:orModels}));
+    }catch(e){ toast("Couldn't remember that in this browser"); }
+  }
+
+  /* One round trip. The failures are turned into sentences here rather than at
+     the call site, because what you need to hear differs by status and by
+     nothing else: 401 is the key, 402 is credit, 429 is the free tier's
+     ceiling, and anything else is worth quoting back verbatim. */
+  function orAsk(model,prompt,signal){
+    return fetch(OR_CHAT,{
+      method:"POST",
+      signal:signal,
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+apiKey,
+        "HTTP-Referer":/^https?:/.test(location.origin||"")?location.origin:"https://meristem.app",
+        "X-Title":"Meristem"
+      },
+      body:JSON.stringify({model:model,messages:[{role:"user",content:prompt}]})
+    }).then(function(res){
+      return res.text().then(function(body){
+        var data=null;
+        try{ data=JSON.parse(body); }catch(e){}
+        var said=data&&data.error&&(data.error.message||data.error.code);
+        if(!res.ok||said){
+          if(res.status===401) throw new Error("OpenRouter wouldn't take that key");
+          if(res.status===402) throw new Error("That model needs credit on OpenRouter");
+          if(res.status===429) throw new Error("Rate limited — free models cap how often you can ask");
+          throw new Error(said?String(said).slice(0,180):"OpenRouter answered "+res.status);
+        }
+        var choice=(data&&data.choices&&data.choices[0])||null;
+        var msg=(choice&&choice.message)||{};
+        var text=msg.content;
+        /* A few models answer in parts rather than one string. */
+        if(Array.isArray(text)) text=text.map(function(p){ return (p&&(p.text||p.content))||""; }).join("");
+        text=(text||"").trim();
+        if(!text){
+          if(((msg.reasoning||"")+"").trim())
+            throw new Error("It spent the whole reply thinking and never wrote an answer");
+          throw new Error("Nothing came back"+(choice&&choice.finish_reason?" ("+choice.finish_reason+")":""));
+        }
+        return text;
+      });
+    },function(err){
+      if(err&&err.name==="AbortError") throw err;
+      /* Opened straight off the disk the page has no origin to present, and
+         the browser refuses the request before it leaves. Worth saying, since
+         file:// is a route the README recommends for the microphone. */
+      if(location.protocol==="file:")
+        throw new Error("A page opened from a file can't reach OpenRouter — serve it over http, or use Copy prompt");
+      throw new Error("Couldn't reach OpenRouter — check the connection");
+    });
+  }
+
+  /* A round in flight. One at a time: the answers land on the notes that are
+     open right now, and a second round started underneath the first would be
+     numbered against a basket that had already changed. */
+  var orFlight=null;
+
+  function askStatus(){
+    var el=$("askstat");
+    if(!orFlight){ el.hidden=true; el.textContent=""; return; }
+    var secs=Math.round((Date.now()-orFlight.started)/1000);
+    var of=orFlight.total>1?" · "+orFlight.done+" of "+orFlight.total+" back":"";
+    el.hidden=false;
+    el.textContent="";
+    var b=document.createElement("b");
+    b.textContent=orFlight.label;
+    el.appendChild(b);
+    el.appendChild(document.createTextNode(
+      " is writing"+of+" · "+secs+"s · tap Asking to stop"));
+  }
+
+  function beginFlight(label,total){
+    orFlight={
+      ctl:window.AbortController?new AbortController():null,
+      label:label, total:total, done:0, started:Date.now(), timer:null
+    };
+    orFlight.timer=setInterval(askStatus,1000);
+    sheetEl.classList.add("open"); chevEl.innerHTML="▼";
+    askStatus(); syncAsk();
+  }
+
+  function endFlight(){
+    if(!orFlight) return;
+    clearInterval(orFlight.timer);
+    orFlight=null;
+    askStatus(); syncAsk();
+  }
+
+  function cancelFlight(){
+    if(!orFlight) return;
+    if(orFlight.ctl){ try{ orFlight.ctl.abort(); }catch(e){} }
+    endFlight();
+    toast("Stopped");
+  }
+
+  /* An answer that came back but couldn't be read is not the app's to throw
+     away, so it goes into the paste box for you to look at and fix rather than
+     into a toast that disappears. */
+  function stranded(texts,why){
+    openReply();
+    $("replytxt").value=texts.join("\n\n");
+    toast(why);
+  }
+
+  /* Sends whatever `Copy prompt` would have put on the clipboard — a preview
+     you have edited by hand included — and routes what comes back through the
+     same parser the paste box uses. Several models go out at once: their
+     answers cannot all become pages off the same note, so they arrive side by
+     side however the Compare toggle is set, and you keep the one you want. */
+  function askPrompt(){
+    if(orFlight){ cancelFlight(); return; }
+    if(!orConnected()){ openKey(); return; }
+    var tree=inTree();
+    var txt=promptDirty?prevEl.value:(tree?treePrompt():buildPrompt());
+    if(!txt||!txt.trim()){ toast("No notes yet"); return; }
+
+    /* In the map an answer becomes a page the moment it lands, with no
+       side-by-side step to hold a second opinion, so only the first goes. */
+    var out=tree?orModels.slice(0,1):orModels.slice();
+    var fan=out.length>1;
+    beginFlight(fan?out.length+" models":shortModel(out[0]),out.length);
+    var mine=orFlight, sig=orFlight.ctl?orFlight.ctl.signal:undefined;
+    var got=[], errs=[];
+
+    Promise.all(out.map(function(m){
+      return orAsk(m,txt,sig).then(function(reply){
+        got.push({model:m,text:reply});
+        if(orFlight===mine){ orFlight.done++; askStatus(); }
+      },function(err){
+        if(!err||err.name!=="AbortError") errs.push(shortModel(m)+": "+err.message);
+      });
+    })).then(function(){
+      if(orFlight!==mine) return;    /* cancelled, and already spoken for */
+      endFlight();
+      if(!got.length){ toast(errs[0]||"Nothing came back"); return; }
+      /* Keep the order you listed the models in, not the order they finished,
+         so the same shortlist always reads the same way under a note. */
+      got.sort(function(a,b){ return out.indexOf(a.model)-out.indexOf(b.model); });
+      var lost=[];
+      got.forEach(function(r){
+        var ok=tree?attachTreeReplies(r.text):attachReplies(r.text,shortModel(r.model),fan);
+        if(!ok) lost.push(r.text);
+      });
+      if(lost.length) stranded(lost,"Couldn't read that answer — it's in the box");
+      else if(errs.length) toast(errs[0]);
+      else if(fan) toast(got.length+" models answered — keep the ones you want");
+    });
+  }
+
+  /* The agenda round is one model's job however many are connected: a second
+     opinion on what is worth asking has nowhere to sit beside the first. */
+  function askSuggest(txt){
+    if(orFlight){ toast("Still waiting on the last one"); return; }
+    var m=orModels[0];
+    beginFlight(shortModel(m),1);
+    var mine=orFlight;
+    orAsk(m,txt,orFlight.ctl?orFlight.ctl.signal:undefined).then(function(reply){
+      if(orFlight!==mine) return;
+      endFlight();
+      var sugg=parseSuggestions(reply);
+      if(!sugg||!sugg.length){
+        stranded([reply],"No suggestions in that reply — it's in the box");
+        return;
+      }
+      var r=attachSuggestions(sugg), bits=[];
+      if(r.added) bits.push(r.added+" note"+(r.added>1?"s":"")+" suggested");
+      if(r.dupe) bits.push(r.dupe+" already marked");
+      if(r.lost) bits.push(r.lost+" couldn't be placed");
+      toast(bits.length?bits.join(", "):"Nothing to add");
+    },function(err){
+      if(err&&err.name==="AbortError") return;
+      if(orFlight===mine) endFlight();
+      toast(err.message);
+    });
+  }
+
+  function syncAsk(){
+    var send=$("sendbar"), key=$("keybar"), ready=orConnected();
+    send.hidden=!ready;
+    send.textContent=orFlight?"Asking…":"Ask";
+    send.classList.toggle("busy",!!orFlight);
+    send.title=orFlight
+      ? "Tap to stop waiting"
+      : "Send this prompt to "+orModels.join(", ")+" and put the answers back beside the notes";
+    var label=ready
+      ? (orModels.length>1?orModels.length+" models":shortModel(orModels[0]))
+      : apiKey?"Pick a model":"Connect a model";
+    key.textContent=label;
+    key.classList.toggle("off",!ready);
+    key.classList.toggle("named",ready&&orModels.length===1);
+    key.title=ready
+      ? "Asking "+orModels.join(", ")+". Tap to change the key or the models."
+      : apiKey
+        ? "The key is saved. Choose which model it should ask."
+        : "Add an OpenRouter key and Meristem can ask for you, instead of you carrying the prompt somewhere";
+    var cb=$("connectbtn");
+    if(cb) cb.textContent=ready&&orModels.length>1
+      ? label+" · "+shortModel(orModels[0])+" first"
+      : label;
+  }
+
+  /* ---- picking models ----
+     Which models are free moves week to week, so the list is fetched rather
+     than baked in. It needs no key. When the fetch fails you are left typing
+     the id yourself, which is what the box does anyway. */
+  var orCatalog=null, orCatalogWait=null;
+
+  function fetchCatalog(){
+    if(orCatalog) return Promise.resolve(orCatalog);
+    if(orCatalogWait) return orCatalogWait;
+    orCatalogWait=fetch(OR_LIST).then(function(r){ return r.json(); }).then(function(d){
+      var list=((d&&d.data)||[]).map(function(m){
+        var p=m.pricing||{};
+        return {
+          id:String(m.id||""),
+          name:String(m.name||m.id||""),
+          ctx:m.context_length|0,
+          free:parseFloat(p.prompt||0)===0&&parseFloat(p.completion||0)===0
+        };
+      }).filter(function(m){ return m.id; });
+      list.sort(function(a,b){
+        /* free first, then alphabetically — the shortlist most people want is
+           at the top before they have typed anything. */
+        if(a.free!==b.free) return a.free?-1:1;
+        return a.id<b.id?-1:a.id>b.id?1:0;
+      });
+      orCatalog=list; orCatalogWait=null;
+      return list;
+    },function(){
+      /* Settle on an empty catalogue rather than staying unfetched: the list
+         then says so and the box below it still takes an id. */
+      orCatalog=[]; orCatalogWait=null;
+      return orCatalog;
+    });
+    return orCatalogWait;
+  }
+
+  function toggleDraft(id){
+    id=(id||"").trim();
+    if(!id) return;
+    var at=draftModels.indexOf(id);
+    if(at>=0) draftModels.splice(at,1);
+    else if(draftModels.length>=MODEL_CAP){ toast(MODEL_CAP+" at once is the limit"); return; }
+    else draftModels.push(id);
+    drawChips(); drawModelList();
+  }
+
+  function drawChips(){
+    var box=$("mchips");
+    box.textContent="";
+    draftModels.forEach(function(id,i){
+      var c=document.createElement("span");
+      c.className="chip"+(i===0?" lead":"");
+      c.appendChild(document.createTextNode(id));
+      var x=document.createElement("button");
+      x.className="x"; x.type="button"; x.textContent="×";
+      x.setAttribute("aria-label","Remove "+id);
+      x.addEventListener("click",function(){ toggleDraft(id); });
+      c.appendChild(x);
+      box.appendChild(c);
+    });
+    $("mnote").textContent=
+      draftModels.length>1
+        ? "Ask sends to all "+draftModels.length+". Their answers sit side by side under each note until you keep one — the first in the list is the one a map round and a Suggest round use."
+      : draftModels.length
+        ? "Pick more than one and Ask sends to each, so their answers land side by side under every note."
+        : "Pick at least one. Free models are slower and rate-limited, which is the trade for costing nothing.";
+  }
+
+  function drawModelList(){
+    var box=$("mlist"), count=$("mcount");
+    var q=($("modelq").value||"").trim(), lq=q.toLowerCase();
+    box.textContent="";
+
+    if(!orCatalog){
+      count.textContent="";
+      var wait=document.createElement("div");
+      wait.className="mrow"; wait.style.cursor="default";
+      wait.textContent="Fetching the model list…";
+      box.appendChild(wait);
+      return;
+    }
+
+    var free=$("freeonly").checked;
+    var hits=orCatalog.filter(function(m){
+      if(free&&!m.free) return false;
+      if(!lq) return true;
+      return m.id.toLowerCase().indexOf(lq)>=0||m.name.toLowerCase().indexOf(lq)>=0;
+    });
+    count.textContent=!orCatalog.length?"":hits.length?hits.length+" to choose from":"nothing matches";
+
+    hits.slice(0,60).forEach(function(m){ box.appendChild(modelRow(m.id,
+      (m.free?"free":"paid")+(m.ctx?" · "+Math.round(m.ctx/1000)+"k context":""),
+      draftModels.indexOf(m.id)>=0)); });
+    if(hits.length) return;
+
+    /* An id the list doesn't carry is still usable — new models land on
+       OpenRouter before anything else knows about it, and the list itself may
+       not have arrived at all. */
+    if(q.indexOf("/")>0) box.appendChild(modelRow(q,"use this id as typed",draftModels.indexOf(q)>=0));
+    var say=document.createElement("div");
+    say.className="mrow"; say.style.cursor="default";
+    say.textContent=orCatalog.length
+      ? "Nothing matches. Any model id typed above works as it stands."
+      : "Couldn't fetch the list. Type a model id above and it is used as it stands.";
+    box.appendChild(say);
+  }
+
+  function modelRow(id,meta,on){
+    var b=document.createElement("button");
+    b.className="mrow"+(on?" on":"");
+    b.type="button";
+    var i=document.createElement("span"); i.className="id"; i.textContent=id;
+    var m=document.createElement("span"); m.className="meta";
+    m.textContent=(on?"chosen · ":"")+meta;
+    b.appendChild(i); b.appendChild(m);
+    b.addEventListener("click",function(){ toggleDraft(id); });
+    return b;
+  }
+
+  function openKey(){
+    draftModels=orModels.slice();
+    $("keytxt").value=apiKey;
+    $("modelq").value="";
+    drawChips(); drawModelList();
+    openOverlay($("keyin"),apiKey?$("modelq"):$("keytxt"));
+    fetchCatalog().then(function(){
+      if($("keyin").classList.contains("on")) drawModelList();
+    });
+  }
+
+  $("sendbar").addEventListener("click",function(e){ e.stopPropagation(); askPrompt(); });
+  $("keybar").addEventListener("click",function(e){ e.stopPropagation(); openKey(); });
+  $("connectbtn").addEventListener("click",openKey);
+  $("keycancel").addEventListener("click",function(){ closeOverlay($("keyin")); });
+  $("keyin").addEventListener("click",function(e){
+    if(Date.now()-overlayAt<450) return;
+    if(e.target===$("keyin")) closeOverlay($("keyin"));
+  });
+  $("modelq").addEventListener("input",drawModelList);
+  $("freeonly").addEventListener("change",drawModelList);
+  $("modelq").addEventListener("keydown",function(e){
+    if(e.key!=="Enter") return;
+    e.preventDefault();
+    var v=$("modelq").value.trim();
+    if(v.indexOf("/")>0){ toggleDraft(v); $("modelq").value=""; drawModelList(); }
+  });
+  $("keysave").addEventListener("click",function(){
+    /* An id typed in the box and never tapped is still a choice. */
+    var typed=($("modelq").value||"").trim();
+    if(typed.indexOf("/")>0&&draftModels.indexOf(typed)<0&&draftModels.length<MODEL_CAP)
+      draftModels.push(typed);
+
+    apiKey=($("keytxt").value||"").trim();
+    orModels=draftModels.slice();
+    saveKey();
+    closeOverlay($("keyin"));
+    syncAsk();
+
+    if(!apiKey&&!orModels.length) toast("Nothing saved — Copy prompt still works");
+    else if(!apiKey) toast("Add a key and Meristem can ask for you");
+    else if(!orModels.length) toast("Pick a model and Meristem can ask for you");
+    else toast("Asking "+shortModel(orModels[0])+
+               (orModels.length>1?" and "+(orModels.length-1)+" more":"")+" from now on");
+  });
+  $("keyforget").addEventListener("click",function(){
+    apiKey=""; orModels=[]; draftModels=[];
+    saveKey();
+    $("keytxt").value=""; $("modelq").value="";
+    drawChips(); drawModelList();
+    closeOverlay($("keyin"));
+    syncAsk();
+    toast("Key forgotten — back to copy and paste");
+  });
+
   function showMenu(on){
     $("modemenu").hidden=!on;
     $("modebtn").setAttribute("aria-expanded",on?"true":"false");
@@ -2343,6 +2895,7 @@
     $("alwaysnote").hidden=inTree();
 
     $("suggestbar").hidden=inTree()||!node();
+    syncAsk();
     var cb=$("comparebar");
     cb.hidden=inTree()||!node();
     cb.textContent=compareMode?"Comparing":"Compare";
@@ -2456,13 +3009,15 @@
   });
   $("copybar").addEventListener("click",function(e){ e.stopPropagation(); doCopy(); });
 
-  /* Copies a prompt that asks for an agenda rather than answers. The reply
-     comes back through the same Paste box, which tells the two apart. */
+  /* Asks for an agenda rather than answers. With a model connected it goes
+     out and the notes come straight back; without one it is copied, and the
+     reply returns through the same Paste box, which tells the two apart. */
   $("suggestbar").addEventListener("click",function(e){
     e.stopPropagation();
     if(!node()){ toast("Open a text first"); return; }
     var txt=suggestPrompt(10);
     if(!txt){ toast("Nothing to read yet"); return; }
+    if(orConnected()){ askSuggest(txt); return; }
     copyText(txt,"Copied — paste it to a model, then paste its reply back",function(){
       sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
       prevEl.value=txt; promptDirty=true;
@@ -3471,10 +4026,10 @@
   function attachTreeReplies(raw){
     var parsed=parseReply(raw), map=parsed.answers, keep=[], hit=0;
     var found=treeNotes.filter(function(n,i){ return map[String(i+1)]; }).length;
-    if(!found){ toast("No numbered answers found"); return; }
+    if(!found){ toast("No numbered answers found"); return false; }
     if(!parsed.fenced &&
        !confirm("I couldn't find the [[notes]] block in that reply.\n\n"+
-                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return;
+                "Attach "+found+" numbered item"+(found>1?"s":"")+" as replies anyway?")) return true;
     treeNotes.forEach(function(n,i){
       var ans=map[String(i+1)];
       if(ans){ hit++; makeNode(ans.trim(), n.ids, {note:n.text, quote:""}); }
@@ -3483,6 +4038,7 @@
     treeNotes=keep; picked=[];
     drawTree();
     toast(hit+" attached"+(keep.length?", "+keep.length+" unanswered":""));
+    return true;
   }
 
   function syncTreeBar(){
@@ -3815,6 +4371,8 @@
 
   loadScope();
   loadCompare();
+  loadKey();
+  syncAsk();
   syncMode();
   start();
 
