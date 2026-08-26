@@ -21,13 +21,16 @@ marks.
    basket across the whole thread, not a per-page list — open a reply, annotate
    that too, and the earlier notes are still there. Notes are numbered straight
    through, and the number beside a word is the number the AI will answer.
-4. **Copy the prompt, once.** Every page carrying a note goes in whole, labelled
-   with how it came about, followed by all your notes with their anchor quotes
-   and a mode instruction (rewrite, respond, push back, options, check). The
-   sheet shows roughly how long the prompt runs before you paste it anywhere.
-5. **Paste the reply back.** Each numbered answer becomes its own page, hanging
-   off the words that prompted it — on whichever page that was. A single reply
-   can grow branches in several places at once.
+4. **Send the prompt.** Every page carrying a note goes in whole, labelled with
+   how it came about, followed by all your notes with their anchor quotes and a
+   mode instruction (rewrite, respond, push back, options, check). With a model
+   connected, `Ask` sends it and the answers come straight back. Without one,
+   `Copy prompt` puts the same text on the clipboard for any chat window you
+   like — the sheet shows roughly how long it runs before you paste it.
+5. **The reply lands on the words that prompted it.** Each numbered answer
+   becomes its own page, hanging off its note — on whichever page that was. A
+   single reply can grow branches in several places at once. A reply you
+   carried by hand goes back in through `Paste reply`.
 6. **Keep going.** Open any reply and annotate *that*. Depth is unbounded, and a
    note can span several pages at once, so branches can rejoin.
 
@@ -82,6 +85,38 @@ flattens the same thing into a document.
 another device) or a **readable document** (`.md`, the whole thread as text).
 Threads import by paste or drag-and-drop.
 
+## Connecting a model
+
+Carrying the prompt to another window and the reply back is four gestures a
+round, and by the fourth round it is most of what using the app feels like.
+Give Meristem an [OpenRouter](https://openrouter.ai/keys) key — the free tier
+needs no card — and `Ask` does the round trip itself: the same prompt goes out,
+and the answers come back beside the same notes.
+
+`Connect a model` (in the sheet, or on the paste screen) takes the key and a
+shortlist. The model list is fetched from OpenRouter rather than baked in,
+because which models are free moves week to week; it filters to the free ones
+by default, and any id you paste in works whether or not the list knows about
+it yet.
+
+Pick more than one and `Ask` sends to all of them at once. Their answers cannot
+all become pages off the same note, so they arrive side by side under it — the
+same shape `Compare` produces — and you `Keep` the one you want. `Suggest` uses
+the first model in the list, and so does a round started from the map.
+
+Everything else is unchanged. `Copy prompt` and `Paste reply` are still there
+and still work with any model anywhere, which is the point: the API is a second
+route, not a replacement. Nothing is sent anywhere until you press `Ask`.
+
+**About the key.** It is held in this browser's `localStorage`, under its own
+key, and is never written into a thread file or a Markdown export — you can
+share a thread without sharing the key. It travels only to OpenRouter. There is
+no server here to keep it on and no way to encrypt it that a page in the same
+origin could not undo, so treat it as a key you are willing to revoke, and use
+a free or limited one. `Forget key` removes it. Because the browser needs an
+origin to present, `Ask` needs the page served over http(s); opened from
+`file://` it says so, and the copy path still works.
+
 ## Sharing text into it
 
 Installed from Android Chrome, Meristem appears in the system share sheet — send
@@ -131,6 +166,7 @@ Voice notes need the Web Speech API (Chrome, Edge, Safari). Everywhere else,
 holding a word opens a typing box instead and the rest of the app is unchanged;
 your keyboard's own dictation key still works in that box.
 
-Your text never leaves the browser. There is no server and no account. Threads
-are autosaved to `localStorage`, and moving one between devices means exporting
-it.
+There is no server and no account. Threads are autosaved to `localStorage`, and
+moving one between devices means exporting it. Your text leaves the browser only
+when you send it somewhere: onto the clipboard when you press `Copy prompt`, or
+to OpenRouter when you press `Ask`.

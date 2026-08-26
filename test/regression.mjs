@@ -85,12 +85,53 @@ const FAKE_SPEECH = () => {
   window.SpeechRecognition = FakeSR;
 };
 
+/* An OpenRouter we control. The app talks to two endpoints with one shape
+ * each, so the stub is small: `__replies` is what a given model answers,
+ * `__slow` how long it takes about it, `__fail` an HTTP status to refuse with,
+ * and `__asked` records what actually went over the wire. Anything that isn't
+ * OpenRouter falls through to the real fetch, so a page that never connects a
+ * model behaves exactly as it did before. */
+const FAKE_OPENROUTER = () => {
+  window.__asked = [];
+  window.__replies = {};
+  window.__slow = {};
+  window.__fail = null;
+  const CATALOGUE = [
+    { id: 'stub/free-one:free', name: 'Free One', context_length: 128000,
+      pricing: { prompt: '0', completion: '0' } },
+    { id: 'stub/free-two:free', name: 'Free Two', context_length: 32000,
+      pricing: { prompt: '0', completion: '0' } },
+    { id: 'stub/paid-one', name: 'Paid One', context_length: 200000,
+      pricing: { prompt: '0.000003', completion: '0.000015' } },
+  ];
+  const json = (body, status = 200) => new Response(JSON.stringify(body),
+    { status, headers: { 'Content-Type': 'application/json' } });
+  const real = window.fetch.bind(window);
+  window.fetch = (url, init) => {
+    const u = String(url && url.url ? url.url : url);
+    if (u.includes('openrouter.ai/api/v1/models')) return Promise.resolve(json({ data: CATALOGUE }));
+    if (!u.includes('openrouter.ai/api/v1/chat/completions')) return real(url, init);
+
+    const body = JSON.parse(init.body);
+    window.__asked.push({
+      model: body.model,
+      prompt: body.messages[0].content,
+      auth: init.headers.Authorization,
+    });
+    if (window.__fail) return Promise.resolve(json({ error: { message: 'refused' } }, window.__fail));
+    return new Promise(res => setTimeout(() => res(json({
+      choices: [{ message: { content: window.__replies[body.model] ?? '' }, finish_reason: 'stop' }],
+    })), window.__slow[body.model] || 0));
+  };
+};
+
 async function newPage({ confirm = true } = {}) {
   const ctx = await browser.newContext({
     viewport: { width: 900, height: 1000 },
     acceptDownloads: true,
   });
   await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => ${confirm};`);
   const page = await ctx.newPage();
   page.errors = [];
@@ -131,6 +172,15 @@ async function speak(page, tokenIndex, text) {
   await page.waitForTimeout(350);
   await page.mouse.up();
 }
+/* Hand the app a key and a shortlist the way the settings card would, then
+ * reload so it is picked up exactly as it is on a returning visit. */
+async function connect(page, models, key = 'sk-or-v1-TESTKEY') {
+  await page.evaluate(([m, k]) => localStorage.setItem(
+    'meristem.openrouter.v1', JSON.stringify({ key: k, models: m })), [models, key]);
+  await page.reload();
+  await page.waitForTimeout(300);
+}
+
 async function reply(page, body) {
   await page.click('#replybar'); await page.waitForTimeout(200);
   await page.fill('#replytxt', body);
@@ -641,6 +691,7 @@ console.log('\nshared text opens in the reader');
 {
   const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
   await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
   page.errors = [];
@@ -787,6 +838,7 @@ console.log('\nasking a model which passages are worth interrogating');
     acceptDownloads: true,
   });
   await ctx.addInitScript(FAKE_SPEECH);
+  await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
   page.errors = [];
@@ -878,6 +930,184 @@ console.log('\nsuggestions survive punctuation drift');
     got.includes('smart quotes'), JSON.stringify(got));
   check('and one whose tail drifted falls back to the matching prefix',
     got.includes('partial tail'), JSON.stringify(got));
+  await page.close_();
+}
+
+console.log('\na connected model answers without the paste box');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'WHY THIS');
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = '[[notes]]\n1 → BECAUSE OF THAT\n[[/notes]]';
+  });
+  await page.click('#sendbar'); await page.waitForTimeout(800);
+
+  const s = await state(page);
+  const kid = s.nodes.find(n => n.parents.length);
+  eq('the answer became a page', kid?.text, 'BECAUSE OF THAT');
+  eq('the note it answered is spent', notesOn(s, 'n0'), []);
+
+  const asked = await page.evaluate(() => window.__asked);
+  eq('one model was asked', asked.length, 1);
+  check('the prompt went out whole', asked[0].prompt.includes('WHY THIS'),
+        asked[0].prompt.slice(0, 90));
+  eq('with the key on the request', asked[0].auth, 'Bearer sk-or-v1-TESTKEY');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\ntwo models answer side by side under one note');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free', 'stub/free-two:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'WHICH IS IT');
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = '[[notes]]\n1 → FIRST ANSWER\n[[/notes]]';
+    window.__replies['stub/free-two:free'] = '[[notes]]\n1 → SECOND ANSWER\n[[/notes]]';
+    // the second one finishes first, to prove the order comes from the list
+    window.__slow = { 'stub/free-one:free': 250 };
+  });
+  await page.click('#sendbar'); await page.waitForTimeout(1200);
+
+  eq('both answers arrive',
+     await page.$$eval('.ans .what', ns => ns.map(n => n.textContent)),
+     ['FIRST ANSWER', 'SECOND ANSWER']);
+  eq('each labelled with who wrote it',
+     await page.$$eval('.ans .who', ns => ns.map(n => n.textContent)),
+     ['free-one', 'free-two']);
+  eq('the note stays while you weigh them', await sheet(page), ['WHICH IS IT']);
+  eq('and Compare was never switched on for you',
+     await page.evaluate(() => localStorage.getItem('meristem.compare.v1')), null);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nthe key stays out of the thread');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a note');
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = '[[notes]]\n1 → an answer\n[[/notes]]';
+  });
+  await page.click('#sendbar'); await page.waitForTimeout(800);
+
+  const saved = await page.evaluate(() => localStorage.getItem('meristem.thread.v1'));
+  check('the autosaved thread carries no key', !/sk-or/.test(saved), saved.slice(0, 120));
+  const md = await page.evaluate(() => {
+    // the same serialisation both Export buttons write
+    return localStorage.getItem('meristem.thread.v1');
+  });
+  check('nor does the blob an export is built from', !/sk-or/.test(md), '');
+  check('while the key itself is still where the app keeps it',
+        /sk-or-v1-TESTKEY/.test(await page.evaluate(
+          () => localStorage.getItem('meristem.openrouter.v1'))), '');
+  await page.close_();
+}
+
+console.log('\nan answer that cannot be read is handed back, not dropped');
+{
+  const page = await newPage({ confirm: false });
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a question');
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = 'I have opinions but no numbers.';
+  });
+  await page.click('#sendbar'); await page.waitForTimeout(900);
+
+  eq('the reply is sitting in the paste box',
+     await page.locator('#replytxt').inputValue(), 'I have opinions but no numbers.');
+  eq('and the note it was for is untouched', await sheet(page), ['a question']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na refusal is said out loud and spends nothing');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a question');
+  await page.evaluate(() => { window.__fail = 401; });
+  await page.click('#sendbar'); await page.waitForTimeout(800);
+
+  const said = await page.locator('#toast').textContent();
+  check('the reason names the key', /key/i.test(said), said);
+  eq('the note is still waiting', await sheet(page), ['a question']);
+  eq('no page was made', (await state(page)).nodes.length, 1);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nSuggest asks directly once a model is connected');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] =
+      '[[suggest]]\n"The fix most teams reach for is longer memory" → is it, though?\n[[/suggest]]';
+  });
+  await page.click('#suggestbar'); await page.waitForTimeout(900);
+
+  eq('the agenda came back as a note', await sheet(page), ['is it, though?']);
+  eq('it went over the wire rather than to the clipboard',
+     (await page.evaluate(() => window.__asked)).length, 1);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nwithout a key the copy path is untouched');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a note');
+
+  check('there is nothing to Ask with', await page.locator('#sendbar').isHidden(), '');
+  eq('and the bar offers to connect one',
+     await page.locator('#keybar').textContent(), 'Connect a model');
+  await reply(page, '[[notes]]\n1 → pasted by hand\n[[/notes]]');
+  const s = await state(page);
+  eq('a pasted reply still becomes a page',
+     s.nodes.find(n => n.parents.length)?.text, 'pasted by hand');
+  eq('and OpenRouter was never called',
+     (await page.evaluate(() => window.__asked)).length, 0);
+  await page.close_();
+}
+
+console.log('\nchoosing models from the catalogue');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.click('#keybar'); await page.waitForTimeout(500);
+
+  eq('free models are what it offers first',
+     await page.$$eval('#mlist .id', ns => ns.map(n => n.textContent)),
+     ['stub/free-one:free', 'stub/free-two:free']);
+
+  await page.fill('#keytxt', 'sk-or-v1-TYPED');
+  await page.locator('#mlist .mrow').first().click(); await page.waitForTimeout(200);
+  await page.click('#keysave'); await page.waitForTimeout(300);
+
+  eq('the bar now names the model',
+     await page.locator('#keybar').textContent(), 'free-one');
+  check('and Ask is there', await page.locator('#sendbar').isVisible(), '');
+  eq('the key and model are remembered',
+     await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1'))),
+     { key: 'sk-or-v1-TYPED', models: ['stub/free-one:free'] });
+
+  await page.click('#keybar'); await page.waitForTimeout(300);
+  await page.click('#keyforget'); await page.waitForTimeout(300);
+  eq('forgetting it puts the copy path back',
+     await page.locator('#keybar').textContent(), 'Connect a model');
+  eq('and leaves nothing behind',
+     await page.evaluate(() => localStorage.getItem('meristem.openrouter.v1')), null);
+  eq('nothing threw', page.errors, []);
   await page.close_();
 }
 
