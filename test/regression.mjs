@@ -161,10 +161,16 @@ async function newPage({ confirm = true } = {}) {
     viewport: { width: 900, height: 1000 },
     acceptDownloads: true,
   });
+  /* The web font is the one thing the page fetches from outside. A test has no
+   * business waiting on the internet for it — and when the network stalls
+   * rather than refusing, the page never finishes loading at all. */
+  await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
+  await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
   await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => ${confirm};`);
   const page = await ctx.newPage();
+  page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
   await page.goto(URL_);
@@ -212,6 +218,20 @@ async function connect(page, models, key = 'sk-or-v1-TESTKEY') {
   await page.waitForTimeout(300);
 }
 
+/* The secondary controls live inside the sheet now, so reaching one means
+ * raising the sheet first — the same as it is by hand. */
+async function openSheet(page) {
+  const up = await page.evaluate(() =>
+    document.getElementById('sheet').classList.contains('open'));
+  if (up) return;
+  await page.click('#grab');
+  await page.waitForTimeout(320);
+}
+async function bar(page, id) {
+  await openSheet(page);
+  await page.click('#' + id);
+}
+
 /* Type into the message box and send, the way the box is actually used. */
 async function say(page, text, wait = 700) {
   await page.fill('#saytxt', text);
@@ -220,7 +240,7 @@ async function say(page, text, wait = 700) {
 }
 
 async function reply(page, body) {
-  await page.click('#replybar'); await page.waitForTimeout(200);
+  await bar(page, 'replybar'); await page.waitForTimeout(200);
   await page.fill('#replytxt', body);
   await page.click('#replysave'); await page.waitForTimeout(400);
 }
@@ -309,7 +329,7 @@ console.log('\ndeleting a note deletes it for good');
   await type(page, 60, 'DELETE ME');
   // attach a reply to note 1 only, so a child page exists to navigate into
   await reply(page, '[[notes]]\n1 → reply so there is somewhere to navigate\n[[/notes]]');
-  await page.click('#grab'); await page.waitForTimeout(400);
+  await openSheet(page); await page.waitForTimeout(400);
 
   const at = await page.$$eval('.note .said', ns => ns.findIndex(n => n.textContent === 'DELETE ME'));
   await page.locator('.note .kill').nth(at).click(); await page.waitForTimeout(300);
@@ -387,11 +407,8 @@ console.log('\nthe prompt carries the text as written');
   // because the prompt was rebuilt by re-joining the token array.
   let page = await newPage();
   const formatted = 'Intro line.\n\n- bullet one\n- bullet two\n\nEnd.';
-  await page.evaluate(t => {
-    document.getElementById('reader').innerHTML =
-      t.split('\n\n').map(p => '<p>' + p.replace(/\n/g, '<br>') + '</p>').join('');
-  }, formatted);
-  await page.click('#go'); await page.waitForTimeout(300);
+  await page.fill('#saytxt', formatted); await page.waitForTimeout(200);
+  await page.locator('#toolong button').click(); await page.waitForTimeout(300);
   await type(page, 0, 'a note');
   let prompt = await page.locator('#preview').inputValue();
   check('a list stays a list', /- bullet one\n- bullet two/.test(prompt), prompt.slice(0, 240));
@@ -547,48 +564,51 @@ console.log('\nthe scope switch narrows to one page');
   await type(page, 1, 'CHILD C');
   eq('all pages by default', await sheet(page), ['ROOT B', 'CHILD C']);
 
-  await page.click('#grab'); await page.waitForTimeout(300);
-  await page.click('#scopebar'); await page.waitForTimeout(400);
+  await openSheet(page); await page.waitForTimeout(300);
+  await bar(page, 'scopebar'); await page.waitForTimeout(400);
   eq('narrowed to this page', await sheet(page), ['CHILD C']);
   eq('the button says so', await page.locator('#scopebar').textContent(), 'This page');
 
   const prompt = await page.locator('#preview').inputValue();
   check('and the prompt is single-page again', !/--- PAGE 1 \(/.test(prompt), prompt.slice(0, 160));
 
-  await page.click('#scopebar'); await page.waitForTimeout(400);
+  await bar(page, 'scopebar'); await page.waitForTimeout(400);
   eq('and back again', await sheet(page), ['ROOT B', 'CHILD C']);
   await page.close_();
 }
 
-console.log('\na note about the page as a whole');
+console.log('\na question about the page as a whole');
 {
   const page = await newPage();
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'an ordinary note');
 
-  await page.click('#pagenote'); await page.waitForTimeout(400);
-  check('the card says what it is',
-    (await page.locator('#typeq').textContent()).includes('as a whole'));
-  await page.fill('#typetxt', 'this page is too hedged');
-  await page.click('#typesave'); await page.waitForTimeout(300);
-
-  eq('it joins the basket', await sheet(page), ['this page is too hedged', 'an ordinary note']);
-  eq('and takes a number', await page.locator('#count').textContent(), '2');
-  // it marks no words, so only the anchored note gets a superscript
-  eq('it puts no superscript in the text',
-     await page.$$eval('#reader sup.mk:not(.ans)', ns => ns.map(n => n.textContent)), ['2']);
+  // What + Page used to be: type it, and it rides out with the marks.
+  await page.fill('#saytxt', 'this page is too hedged'); await page.waitForTimeout(250);
+  eq('the mark is riding along too',
+     (await page.locator('#riding').textContent()).replace(/\s+/g, ' '),
+     '1 note goes out with this — see them');
 
   const prompt = await page.locator('#preview').inputValue();
-  check('the prompt says it is about the whole page',
-    /\[1\] about this page as a whole/.test(prompt), prompt.slice(0, 300));
+  check('both are numbered in the prompt',
+    /\[1\][\s\S]*an ordinary note[\s\S]*\[2\][\s\S]*too hedged/.test(prompt),
+    prompt.slice(-320));
 
-  // its reply hangs off the page it was about
-  await reply(page, '[[notes]]\n1 → the page is indeed hedged\n[[/notes]]');
+  // carried out by hand, the question becomes a page so the reply has a home
+  await page.locator('#saycopy').click(); await page.waitForTimeout(350);
+  eq('the box empties into the thread', await page.locator('#saytxt').inputValue(), '');
+  let s0 = await state(page);
+  const asked = s0.nodes.find(n => n.mine);
+  eq('as a question of my own', asked.text, 'this page is too hedged');
+
+  await reply(page, '[[notes]]\n1 → about the words\n2 → the page is indeed hedged\n[[/notes]]');
   const s = await state(page);
   const root = s.nodes.find(n => !n.parents.length);
-  const child = s.nodes.find(n => n.note === 'this page is too hedged');
-  eq('the reply hangs off that page', child.parents, [root.id]);
-  eq('and is marked as answering the whole page', child.whole, true);
+  eq('the question hangs off the page it was about', asked.parents, [root.id]);
+  const answer = s.nodes.find(n => n.parents[0] === asked.id);
+  eq('and its answer hangs off the question', answer.text, 'the page is indeed hedged');
+  eq('while the mark is answered on its own words',
+     s.nodes.find(n => n.note === 'an ordinary note').text, 'about the words');
   eq('no exceptions', page.errors, []);
   await page.close_();
 }
@@ -599,7 +619,7 @@ console.log('\nstanding instructions are not questions');
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'a real note');
 
-  await page.click('#alwaysnote'); await page.waitForTimeout(400);
+  await bar(page, 'alwaysnote'); await page.waitForTimeout(400);
   await page.fill('#typetxt', 'Answer in British English');
   await page.click('#typesave'); await page.waitForTimeout(300);
 
@@ -629,7 +649,7 @@ console.log('\na note can carry its own intent');
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'note one');
   await type(page, 30, 'note two');
-  await page.click('#grab'); await page.waitForTimeout(300);
+  await openSheet(page); await page.waitForTimeout(300);
 
   let prompt = await page.locator('#preview').inputValue();
   check('untagged notes carry no intent tag', !/ — rewrite/.test(prompt));
@@ -675,7 +695,7 @@ console.log('\nwidening an anchor to a sentence or paragraph');
   check('the saved note keeps the widened anchor', /interface\.”$/.test(q), q);
 
   // and it can be adjusted afterwards from the sheet
-  await page.click('#grab'); await page.waitForTimeout(300);
+  await openSheet(page); await page.waitForTimeout(300);
   await page.locator('.note .quote').first().click(); await page.waitForTimeout(250);
   check('the sheet offers the same control',
     await page.locator('.note .scoperow').isVisible());
@@ -689,7 +709,7 @@ console.log('\nreadable export');
 {
   const page = await newPage();
   await page.click('#sampletree'); await page.waitForTimeout(500);
-  await page.click('#alwaysnote'); await page.waitForTimeout(400);
+  await bar(page, 'alwaysnote'); await page.waitForTimeout(400);
   await page.fill('#typetxt', 'Be terse'); await page.click('#typesave'); await page.waitForTimeout(300);
 
   const dl = page.waitForEvent('download');
@@ -714,7 +734,7 @@ console.log('\nthe prompt size is shown before you paste it');
   const page = await newPage();
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'a note');
-  await page.click('#grab'); await page.waitForTimeout(300);
+  await openSheet(page); await page.waitForTimeout(300);
 
   const label = await page.locator('#psize').textContent();
   check('it reads in words', /^~[\d.]+k? words$/.test(label), label);
@@ -728,10 +748,16 @@ console.log('\nthe prompt size is shown before you paste it');
 console.log('\nshared text opens in the reader');
 {
   const ctx = await browser.newContext({ viewport: { width: 900, height: 1000 } });
+  /* The web font is the one thing the page fetches from outside. A test has no
+   * business waiting on the internet for it — and when the network stalls
+   * rather than refusing, the page never finishes loading at all. */
+  await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
+  await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
   await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
+  page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
 
@@ -774,7 +800,7 @@ console.log('\nthe manifest and worker are wired up');
 /* ---------- comparing models ---------- */
 
 async function pasteReply(page, body, source) {
-  await page.click('#replybar'); await page.waitForTimeout(250);
+  await bar(page, 'replybar'); await page.waitForTimeout(250);
   if (source != null && !(await page.locator('#srcrow').isHidden())) {
     await page.fill('#replysrc', source);
   }
@@ -793,8 +819,8 @@ console.log('\ncomparing answers from several models');
   await type(page, 1, 'is this true?');
   await type(page, 30, 'needs a date');
 
-  await page.click('#grab'); await page.waitForTimeout(250);
-  await page.click('#comparebar'); await page.waitForTimeout(300);
+  await openSheet(page); await page.waitForTimeout(250);
+  await bar(page, 'comparebar'); await page.waitForTimeout(300);
   eq('the toggle reports itself', await page.locator('#comparebar').textContent(), 'Comparing');
 
   await pasteReply(page, '[[notes]]\n1 → Claude on one\n2 → Claude on two\n[[/notes]]', 'Claude');
@@ -851,8 +877,8 @@ console.log('\nthe model that wrote a page is shown and kept');
   const page = await newPage();
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'a note');
-  await page.click('#grab'); await page.waitForTimeout(250);
-  await page.click('#comparebar'); await page.waitForTimeout(300);
+  await openSheet(page); await page.waitForTimeout(250);
+  await bar(page, 'comparebar'); await page.waitForTimeout(300);
   await pasteReply(page, '[[notes]]\n1 → an answer\n[[/notes]]', 'Claude');
   await page.locator('.ans .keep').first().scrollIntoViewIfNeeded();
   await page.locator('.ans .keep').first().click(); await page.waitForTimeout(500);
@@ -875,17 +901,23 @@ console.log('\nasking a model which passages are worth interrogating');
     permissions: ['clipboard-read', 'clipboard-write'],
     acceptDownloads: true,
   });
+  /* The web font is the one thing the page fetches from outside. A test has no
+   * business waiting on the internet for it — and when the network stalls
+   * rather than refusing, the page never finishes loading at all. */
+  await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
+  await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
   await ctx.addInitScript(FAKE_OPENROUTER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
+  page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message.split('\n')[0]));
   await page.goto(URL_); await page.waitForTimeout(200);
   page.close_ = () => ctx.close();
 
   await page.click('#sample'); await page.waitForTimeout(300);
-  await page.click('#suggestbar'); await page.waitForTimeout(400);
+  await bar(page, 'suggestbar'); await page.waitForTimeout(400);
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
 
   check('it asks for an agenda, not answers',
@@ -939,7 +971,7 @@ console.log('\na suggested note becomes yours once you edit it');
 [[/suggest]]`);
   eq('it starts as a suggestion', await page.locator('.note .fromai').count(), 1);
 
-  await page.click('#grab'); await page.waitForTimeout(250);
+  await openSheet(page); await page.waitForTimeout(250);
   await page.locator('.note .said').first().scrollIntoViewIfNeeded();
   await page.locator('.note .said').first().click(); await page.waitForTimeout(250);
   await page.keyboard.press('Control+A');
@@ -980,7 +1012,7 @@ console.log('\na connected model answers without the paste box');
   await page.evaluate(() => {
     window.__replies['stub/free-one:free'] = '[[notes]]\n1 → BECAUSE OF THAT\n[[/notes]]';
   });
-  await page.click('#sendbar'); await page.waitForTimeout(800);
+  await page.click('#saysend'); await page.waitForTimeout(800);
 
   const s = await state(page);
   const kid = s.nodes.find(n => n.parents.length);
@@ -1008,7 +1040,7 @@ console.log('\ntwo models answer side by side under one note');
     // the second one finishes first, to prove the order comes from the list
     window.__slow = { 'stub/free-one:free': 250 };
   });
-  await page.click('#sendbar'); await page.waitForTimeout(1200);
+  await page.click('#saysend'); await page.waitForTimeout(1200);
 
   eq('both answers arrive',
      await page.$$eval('.ans .what', ns => ns.map(n => n.textContent)),
@@ -1032,7 +1064,7 @@ console.log('\nthe key stays out of the thread');
   await page.evaluate(() => {
     window.__replies['stub/free-one:free'] = '[[notes]]\n1 → an answer\n[[/notes]]';
   });
-  await page.click('#sendbar'); await page.waitForTimeout(800);
+  await page.click('#saysend'); await page.waitForTimeout(800);
 
   const saved = await page.evaluate(() => localStorage.getItem('meristem.thread.v1'));
   check('the autosaved thread carries no key', !/sk-or/.test(saved), saved.slice(0, 120));
@@ -1052,15 +1084,18 @@ console.log('\nan answer that cannot be read is handed back, not dropped');
   const page = await newPage({ confirm: false });
   await connect(page, ['stub/free-one:free']);
   await page.click('#sample'); await page.waitForTimeout(300);
+  // two questions, so an unnumbered reply genuinely can't be routed
   await type(page, 1, 'a question');
+  await type(page, 30, 'another question');
   await page.evaluate(() => {
     window.__replies['stub/free-one:free'] = 'I have opinions but no numbers.';
   });
-  await page.click('#sendbar'); await page.waitForTimeout(900);
+  await page.click('#saysend'); await page.waitForTimeout(900);
 
   eq('the reply is sitting in the paste box',
      await page.locator('#replytxt').inputValue(), 'I have opinions but no numbers.');
-  eq('and the note it was for is untouched', await sheet(page), ['a question']);
+  eq('and the notes it was for are untouched',
+     await sheet(page), ['a question', 'another question']);
   eq('nothing threw', page.errors, []);
   await page.close_();
 }
@@ -1072,7 +1107,7 @@ console.log('\na refusal is said out loud and spends nothing');
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'a question');
   await page.evaluate(() => { window.__fail = 401; });
-  await page.click('#sendbar'); await page.waitForTimeout(800);
+  await page.click('#saysend'); await page.waitForTimeout(800);
 
   const said = await page.locator('#toast').textContent();
   check('the reason names the key', /key/i.test(said), said);
@@ -1091,7 +1126,7 @@ console.log('\nSuggest asks directly once a model is connected');
     window.__replies['stub/free-one:free'] =
       '[[suggest]]\n"The fix most teams reach for is longer memory" → is it, though?\n[[/suggest]]';
   });
-  await page.click('#suggestbar'); await page.waitForTimeout(900);
+  await bar(page, 'suggestbar'); await page.waitForTimeout(900);
 
   eq('the agenda came back as a note', await sheet(page), ['is it, though?']);
   eq('it went over the wire rather than to the clipboard',
@@ -1106,7 +1141,8 @@ console.log('\nwithout a key the copy path is untouched');
   await page.click('#sample'); await page.waitForTimeout(300);
   await type(page, 1, 'a note');
 
-  check('there is nothing to Ask with', await page.locator('#sendbar').isHidden(), '');
+  check('the box is there anyway, to carry the round out by hand',
+        await page.locator('#composer').isVisible(), '');
   eq('and the bar offers to connect one',
      await page.locator('#keybar').textContent(), 'Connect a model');
   await reply(page, '[[notes]]\n1 → pasted by hand\n[[/notes]]');
@@ -1122,7 +1158,7 @@ console.log('\nchoosing models from the catalogue');
 {
   const page = await newPage();
   await page.click('#sample'); await page.waitForTimeout(300);
-  await page.click('#keybar'); await page.waitForTimeout(500);
+  await bar(page, 'keybar'); await page.waitForTimeout(500);
 
   eq('free models are what it offers first',
      await page.$$eval('#mlist .id', ns => ns.map(n => n.textContent)),
@@ -1134,12 +1170,12 @@ console.log('\nchoosing models from the catalogue');
 
   eq('the bar now names the model',
      await page.locator('#keybar').textContent(), 'free-one');
-  check('and Ask is there', await page.locator('#sendbar').isVisible(), '');
+  check('and the send arrow is there', await page.locator('#saysend').isVisible(), '');
   eq('the key and model are remembered',
      await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1'))),
      { key: 'sk-or-v1-TYPED', models: ['stub/free-one:free'] });
 
-  await page.click('#keybar'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(300);
   await page.click('#keyforget'); await page.waitForTimeout(300);
   eq('forgetting it puts the copy path back',
      await page.locator('#keybar').textContent(), 'Connect a model');
@@ -1194,7 +1230,7 @@ console.log('\na standing instruction is a system prompt');
   const page = await newPage();
   await connect(page, ['stub/free-one:free']);
   await page.click('#sample'); await page.waitForTimeout(300);
-  await page.click('#alwaysnote'); await page.waitForTimeout(350);
+  await bar(page, 'alwaysnote'); await page.waitForTimeout(350);
   await page.fill('#typetxt', 'Answer in British English.');
   await page.click('#typesave'); await page.waitForTimeout(300);
   await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'Quite.'; });
@@ -1228,7 +1264,7 @@ console.log('\na chat reply can be marked up the moment it lands');
   await page.evaluate(() => {
     window.__replies['stub/free-one:free'] = '[[notes]]\n1 → It is.\n[[/notes]]';
   });
-  await page.click('#sendbar'); await page.waitForTimeout(900);
+  await page.click('#saysend'); await page.waitForTimeout(900);
   const after = await state(page);
   eq('the answer branches off the reply', after.nodes.length, 3);
   eq('hanging off the page the note was on',
@@ -1296,14 +1332,15 @@ console.log('\nstopping keeps what had already arrived');
   });
   await page.fill('#saytxt', 'take your time');
   await page.click('#saysend'); await page.waitForTimeout(500);
-  eq('the button offers to stop', await page.locator('#saysend').textContent(), 'Stop');
+  eq('the button offers to stop',
+     await page.locator('#saysend').getAttribute('aria-label'), 'Stop');
   await page.click('#saysend'); await page.waitForTimeout(700);
 
   const kid = (await state(page)).nodes.find(x => !x.mine && x.parents.length);
   check('the part that arrived is kept as a page',
         !!kid && kid.text.indexOf('one') === 0, JSON.stringify(kid && kid.text));
   eq('and the button goes back to sending',
-     await page.locator('#saysend').textContent(), 'Send');
+     await page.locator('#saysend').getAttribute('aria-label'), 'Send');
   eq('nothing threw', page.errors, []);
   await page.close_();
 }
@@ -1329,12 +1366,138 @@ console.log('\na conversation is an ordinary thread');
   await page.close_();
 }
 
-console.log('\nwithout a key there is no message box');
+console.log('\nwithout a key the box still works, by hand');
 {
   const page = await newPage();
   await page.click('#sample'); await page.waitForTimeout(300);
-  check('the composer stays out of the way', await page.locator('#composer').isHidden(), '');
-  eq('and nothing was sent', (await page.evaluate(() => window.__asked)).length, 0);
+  check('the box is there', await page.locator('#composer').isVisible(), '');
+
+  // typed, carried out, and answered by hand — the whole app with no key
+  await page.fill('#saytxt', 'what is this arguing for?'); await page.waitForTimeout(250);
+  await page.locator('#saycopy').click(); await page.waitForTimeout(400);
+  const asked = (await state(page)).nodes.find(n => n.mine);
+  eq('the question becomes a page waiting for an answer',
+     asked && asked.text, 'what is this arguing for?');
+  eq('and nothing went over the wire',
+     (await page.evaluate(() => window.__asked)).length, 0);
+
+  await reply(page, 'It argues the interface is the bottleneck.');
+  eq('the pasted answer hangs off the question',
+     (await state(page)).nodes.find(n => n.parents[0] === asked.id).text,
+     'It argues the interface is the bottleneck.');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\none round, two ways out, and the tree cannot tell');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a mark');
+  await page.fill('#saytxt', 'and a question'); await page.waitForTimeout(250);
+
+  // what Copy hands you says everything in its own text
+  const portable = await page.locator('#preview').inputValue();
+  check('the carried prompt inlines the text', /--- TEXT ---/.test(portable), portable.slice(0, 120));
+  check('and numbers both questions',
+    /\[1\][\s\S]*a mark[\s\S]*\[2\][\s\S]*and a question/.test(portable), portable.slice(-260));
+
+  // what Send posts says the same, packaged as turns
+  await page.evaluate(() => {
+    window.__replies['stub/free-one:free'] = '[[notes]]\n1 → to the mark\n2 → to the question\n[[/notes]]';
+  });
+  await page.click('#saysend'); await page.waitForTimeout(1000);
+  const sent = (await page.evaluate(() => window.__asked))[0].messages;
+  eq('the round is the last thing said', sent[sent.length - 1].role, 'user');
+  check('carrying the same two questions',
+    /\[1\][\s\S]*a mark[\s\S]*\[2\][\s\S]*and a question/.test(sent[sent.length - 1].content), '');
+
+  const s = await state(page);
+  eq('the mark is answered on its own words',
+     s.nodes.find(n => n.note === 'a mark').text, 'to the mark');
+  const asked = s.nodes.find(n => n.mine);
+  eq('the question became a page of mine', asked.text, 'and a question');
+  eq('with its answer beneath it',
+     s.nodes.find(n => n.parents[0] === asked.id).text, 'to the question');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na single question needs no protocol');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'A plain answer.'; });
+  await say(page, 'a first question');
+
+  const first = (await page.evaluate(() => window.__asked))[0];
+  eq('the prompt is the question, nothing else',
+     first.messages, [{ role: 'user', content: 'a first question' }]);
+  eq('and it streamed', first.stream, true);
+  check('no block was asked for', !/\[\[notes\]\]/.test(first.messages[0].content), '');
+
+  // a second turn arrives as turns, with the round as the last message
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'More.'; });
+  await say(page, 'say more');
+  eq('the conversation is real turns',
+     (await page.evaluate(() => window.__asked))[1].messages.map(m => m.role),
+     ['user', 'assistant', 'user']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na hand-edited prompt is sent exactly as written');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await type(page, 1, 'a mark');
+  await bar(page, 'peekbar'); await page.waitForTimeout(300);
+  await page.fill('#preview', 'JUST THIS, NOTHING ELSE'); await page.waitForTimeout(250);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'ok'; });
+  await page.click('#saysend'); await page.waitForTimeout(900);
+
+  eq('what I wrote is the whole of it',
+     (await page.evaluate(() => window.__asked))[0].messages,
+     [{ role: 'user', content: 'JUST THIS, NOTHING ELSE' }]);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na long paste offers to be read rather than answered');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  const article = 'The bottleneck is the interface.\n\n' + 'A second paragraph that goes on. '.repeat(12);
+  await page.fill('#saytxt', article); await page.waitForTimeout(300);
+  check('the offer appears', await page.locator('#toolong').isVisible(), '');
+  await page.locator('#toolong button').click(); await page.waitForTimeout(400);
+
+  eq('it became the page to read', (await state(page)).nodes.length, 1);
+  eq('and the box is clear again', await page.locator('#saytxt').inputValue(), '');
+  check('with words to mark up', (await page.locator('.w').count()) > 20, '');
+  eq('nothing went over the wire', (await page.evaluate(() => window.__asked)).length, 0);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na question carried out by hand is still pending when you come back');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await page.fill('#saytxt', 'what is the argument?'); await page.waitForTimeout(250);
+  await page.locator('#saycopy').click(); await page.waitForTimeout(400);
+
+  await page.reload(); await page.waitForTimeout(700);
+  const prompt = await page.locator('#preview').inputValue();
+  check('a reload finds it waiting', /what is the argument\?/.test(prompt), prompt.slice(0, 200));
+
+  await reply(page, 'The interface, not the model.');
+  eq('and the answer lands under it',
+     (await state(page)).nodes.find(n => n.text === 'The interface, not the model.') !== undefined,
+     true);
+  eq('nothing threw', page.errors, []);
   await page.close_();
 }
 
