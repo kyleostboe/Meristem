@@ -16,7 +16,8 @@ is what you can do with an answer once it arrives.
 
 ## How it works
 
-1. **Paste some prose** into the reader.
+1. **Put something in the box.** Paste some prose and it offers to open itself
+   as a page to read; type a question and it becomes the first thing you asked.
 2. **Annotate it in place.** Tap a word to type a note. Press and hold to speak
    one — a live caption shows the transcript — and drag while holding to cover a
    whole phrase. Having pointed at a word you can widen the anchor to its
@@ -25,32 +26,28 @@ is what you can do with an answer once it arrives.
    basket across the whole thread, not a per-page list — open a reply, annotate
    that too, and the earlier notes are still there. Notes are numbered straight
    through, and the number beside a word is the number the AI will answer.
-4. **Send the prompt.** Every page carrying a note goes in whole, labelled with
-   how it came about, followed by all your notes with their anchor quotes and a
-   mode instruction (rewrite, respond, push back, options, check). With a model
-   connected, `Ask` sends it and the answers come straight back. Without one,
-   `Copy prompt` puts the same text on the clipboard for any chat window you
-   like — the sheet shows roughly how long it runs before you paste it.
-5. **The reply lands on the words that prompted it.** Each numbered answer
-   becomes its own page, hanging off its note — on whichever page that was. A
-   single reply can grow branches in several places at once. A reply you
-   carried by hand goes back in through `Paste reply`.
+4. **Send it, or carry it.** The box has two icons: `⧉` copies the whole prompt
+   for any chat window you like, `↑` posts it to your model. Both send the same
+   round — every page carrying a note goes in whole, labelled with how it came
+   about, followed by your notes with their anchor quotes and a mode
+   instruction (rewrite, respond, push back, options, check).
+5. **The reply lands on what prompted it.** A note's answer becomes a page
+   hanging off the words it answers; a question's answer hangs off the question.
+   One reply can grow branches in several places at once. A reply you carried by
+   hand goes back in through `Paste reply`.
 6. **Keep going.** Open any reply and annotate *that*. Depth is unbounded, and a
    note can span several pages at once, so branches can rejoin.
 
-### Notes that aren't about particular words
+### Saying something that isn't about particular words
 
-Not everything you want to say is about a specific phrase, so two kinds of note
-carry no anchor:
+Type it in the box. *"This reply is too hedged."* It takes a number like any
+other question and goes out with your marks, and its answer comes back as a
+page under it.
 
-- **`+ Page`** — a note about the page as a whole. *"This reply is too hedged."*
-  It is still a question: it takes a number like any other note, and its answer
-  comes back as a new page.
-- **`+ Always`** — a standing instruction. *"Answer in British English."* Not a
-  question, so it takes no number and no reply consumes it. It shapes every
-  answer and persists until you delete it.
-
-Both are made from the sheet — tap to type, hold to speak.
+The one thing that isn't a question is **`+ Always`** — a standing instruction.
+*"Answer in British English."* It takes no number and no reply consumes it; it
+shapes every answer and persists until you delete it. Made from the sheet — tap
+to type, hold to speak.
 
 ### Asking for different things at once
 
@@ -89,43 +86,67 @@ flattens the same thing into a document.
 another device) or a **readable document** (`.md`, the whole thread as text).
 Threads import by paste or drag-and-drop.
 
-## Just talking
+## One basket, two ways out
 
-With a model connected there is a message box at the bottom of the screen. Type
-a question, press send, and the answer streams in. No text to paste first, no
-words to mark up — it is a chat, and on an empty screen it is the only thing
-there.
+There is one box, under every page and on the blank screen, and it has two
+icons. Neither is a mode.
 
-What makes it worth using is where the answer lands. Your message becomes a
-page and the answer becomes its child, so a conversation is an ordinary branch
-of the same tree everything else lives in: it shows up in the map, in `Read
-all`, in an export — and **any reply can be marked up the moment it arrives**.
-Hold a word in the answer you just got and you are back in the app's real work,
-branching off the phrase that caught you. Chat is not a second mode bolted
-alongside annotation; it is the way into it. Talk until something is worth
-interrogating, then interrogate it.
+Everything waiting for an answer goes out together: the marks you have left,
+and whatever is in the box. **The box is not a second channel** — what you type
+is a question about the page you are on, it just hasn't been asked yet. Mark two
+phrases, type a question, and all three go in one round, coming back as three
+branches.
 
-The page you are reading is the live one, with everything said before it above
-it and everything after it below, as a scrollback. Tap any turn to move onto it
-— then *it* becomes the page you can annotate, with the rest of the
-conversation rearranged around it. The whole conversation goes out each turn,
-not just your last line, and a `+ Always` standing instruction rides along as
-the system prompt.
+- **`↑` sends it** to your model. The reply comes back and lands.
+- **`⧉` copies it** for any chat window you like. Paste the reply into
+  `Paste reply` when you have it.
 
-Small things that matter:
+The tree cannot tell afterwards which one you used, which is the point. **The
+whole app works with no API key** — including talking to it. And when a free
+model rate-limits you mid-conversation, carrying the next round out by hand is
+not a dead end, it is the other icon.
 
-- **Hold `Send`** to speak the message instead of typing it. The transcript
-  lands in the box so you can read it before it goes.
-- **`Stop`** ends a long answer and keeps whatever had arrived — it is a page
-  like any other, so you can mark it up or just carry on from there.
-- A turn that fails leaves nothing behind, and hands your message back to the
-  box rather than making you retype it.
-- Enter sends on a keyboard; on a phone Enter is a new line and the button
-  sends.
+A question you asked and never got an answer to stays pending, so a prompt you
+copied out on Tuesday is still waiting on Thursday. That is also what makes a
+failed send resumable rather than lost.
 
-`Ask` and the message box are the two ways to ask, and they do different jobs:
-`Ask` answers the notes in the sheet, the box says something new. Both land in
-the same thread.
+### What comes back, and where it goes
+
+A note on words is an annotation, so its answer hangs off those words. A
+question is something you said, so it becomes a page of its own with the answer
+beneath it — which is why your questions show up in the map and can be marked up
+like anything else.
+
+One question needs no protocol: there is only one place its answer can go, so it
+is asked plainly and **streams as it is written**. Several come back numbered so
+each can be routed, which means waiting for the whole reply.
+
+Talk until a reply says something worth interrogating, then hold a word in it and
+you are back in the app's real work, branching off the phrase that caught you.
+Chat isn't a second mode bolted alongside annotation; it is the way into it.
+
+### The prompt
+
+`Prompt`, in the sheet, is not a preview — it is the outgoing text, and you can
+edit it. Send normally packages the conversation as real `user`/`assistant`
+turns with that text as the last message; the copied version says the same
+thing with the conversation written into it, because a prompt travelling alone
+has to carry its own context. Edit it by hand and it is sent exactly as
+written: if you wrote it, it isn't the app's to repackage.
+
+`Context: path / page / all` decides how much of the thread goes either way, and
+a `+ Always` standing instruction rides along as the system prompt.
+
+### Small things that matter
+
+- **Hold `↑`** to speak instead of typing. The transcript lands in the box so
+  you can read it before it goes.
+- **Stop** ends a long answer and keeps whatever had arrived — it is a page like
+  any other, so mark it up or carry straight on.
+- A round that fails leaves nothing behind and hands your text back to the box.
+- Enter sends on a keyboard; on a phone Enter is a new line and the button sends.
+- Paste something long on a blank screen and it offers to open itself as a page
+  to read instead of being answered.
 
 ## Connecting a model
 
@@ -135,20 +156,20 @@ Give Meristem an [OpenRouter](https://openrouter.ai/keys) key — the free tier
 needs no card — and `Ask` does the round trip itself: the same prompt goes out,
 and the answers come back beside the same notes.
 
-`Connect a model` (in the sheet, or on the paste screen) takes the key and a
+`Connect a model` (in the sheet, or on the blank screen) takes the key and a
 shortlist. The model list is fetched from OpenRouter rather than baked in,
 because which models are free moves week to week; it filters to the free ones
 by default, and any id you paste in works whether or not the list knows about
 it yet.
 
-Pick more than one and `Ask` sends to all of them at once. Their answers cannot
+Pick more than one and `↑` sends to all of them at once. Their answers cannot
 all become pages off the same note, so they arrive side by side under it — the
 same shape `Compare` produces — and you `Keep` the one you want. `Suggest` uses
 the first model in the list, and so does a round started from the map.
 
-Everything else is unchanged. `Copy prompt` and `Paste reply` are still there
-and still work with any model anywhere, which is the point: the API is a second
-route, not a replacement. Nothing is sent anywhere until you press `Ask`.
+The key only decides whether `↑` works. `⧉` and `Paste reply` need nothing and
+work with any model anywhere, which is the point: the API is a second route, not
+a replacement. Nothing is sent anywhere until you press one of the two.
 
 **About the key.** It is held in this browser's `localStorage`, under its own
 key, and is never written into a thread file or a Markdown export — you can
@@ -156,8 +177,8 @@ share a thread without sharing the key. It travels only to OpenRouter. There is
 no server here to keep it on and no way to encrypt it that a page in the same
 origin could not undo, so treat it as a key you are willing to revoke, and use
 a free or limited one. `Forget key` removes it. Because the browser needs an
-origin to present, `Ask` needs the page served over http(s); opened from
-`file://` it says so, and the copy path still works.
+origin to present, `↑` needs the page served over http(s); opened from
+`file://` it says so, and `⧉` still works.
 
 ## Sharing text into it
 
@@ -210,5 +231,5 @@ your keyboard's own dictation key still works in that box.
 
 There is no server and no account. Threads are autosaved to `localStorage`, and
 moving one between devices means exporting it. Your text leaves the browser only
-when you send it somewhere: onto the clipboard when you press `Copy prompt`, or
-to OpenRouter when you press `Ask` or send a message.
+when you send it somewhere: onto the clipboard when you press `⧉`, or to
+OpenRouter when you press `↑`.

@@ -134,6 +134,7 @@
   .btn:disabled{opacity:.35;cursor:default}
 
   /* ---------- reader ---------- */
+  .reader:empty{display:none}
   .reader{
     font-size:19px;line-height:2.05;letter-spacing:.002em;
     padding:0 0 200px;
@@ -385,21 +386,25 @@
     position:fixed;left:0;right:0;bottom:0;z-index:50;
     background:var(--paper);color:var(--ink);
     max-width:640px;margin:0 auto;
-    transform:translateY(calc(100% - 106px));
+    transform:translateY(calc(100% - var(--peek, 106px)));
     transition:transform .28s cubic-bezier(.3,.8,.4,1);
     max-height:78vh;display:flex;flex-direction:column;
   }
   .sheet.open{transform:translateY(0)}
   .sheet.empty{transform:translateY(100%)}
   .grab{
-    display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:14px 18px 16px;
+    display:flex;align-items:center;gap:11px;padding:6px 12px 12px 18px;
     font-family:"Newsreader",Georgia,serif;font-size:12px;letter-spacing:.01em;flex:0 0 auto;
     cursor:pointer;user-select:none;-webkit-user-select:none;
   }
   .grab .count{color:var(--ink);font-weight:500;flex:0 0 auto;min-width:14px;text-align:center}
-  .grab .chev{color:var(--muted);font-size:13px;flex:0 0 auto;padding:0 2px;margin-left:auto}
+  .grab .chev{color:var(--muted);font-size:13px;flex:0 0 auto;padding:0 8px;margin-left:auto}
+  .grab:hover .chev{color:var(--mark)}
   .mini{flex:0 0 auto}
-  .baracts{flex:1 0 100%;display:flex;gap:8px;flex-wrap:wrap}
+  .baracts{
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    padding:2px 0 13px;margin-bottom:2px;border-bottom:1px solid var(--rule);
+  }
   #scopebar.narrow{color:var(--muted)}
   #scopebar{color:var(--ink);font-weight:700}
   .note .onpage{
@@ -576,7 +581,6 @@
     font-family:"Newsreader",Georgia,serif;font-size:11.5px;line-height:1.5;color:var(--muted);
   }
   .askrow b{font-weight:500;color:var(--ink)}
-  #sendbar.busy{color:var(--mark)}
   #keybar{color:var(--ink)}
   #keybar.off{color:var(--muted)}
   #keybar.named{
@@ -708,23 +712,12 @@
   }
   @keyframes blink{50%{opacity:0}}
 
-  /* ---------- the message box ----------
-     The other way in. Notes act on something already written; this acts on
-     nothing, which is what you need for the first thing you say and for
-     everything that isn't about a particular phrase. */
-  .composer{
-    position:fixed;left:0;right:0;bottom:106px;z-index:45;
-    max-width:640px;margin:0 auto;
-    background:var(--paper);border-top:1px solid var(--rule);
-    padding:9px 16px 11px;
-    display:none;gap:9px;align-items:flex-end;
-  }
-  .composer.on{display:flex}
-  /* Nothing beneath it once the notes sheet is stowed, and out of the way
-     entirely while the sheet is open and notes are the work in hand. */
-  body:has(.sheet.empty) .composer{bottom:0}
-  body:has(.sheet.open) .composer{display:none}
-  body:has(.composer.on) .paste{padding-bottom:112px}
+  /* One box, and the two ways what's in it can leave. Neither is a mode: the
+     round is the same either way, so the only thing being chosen is who carries
+     it. Copy needs no key, which is what keeps the whole app usable without one. */
+  .composer{flex:0 0 auto;padding:11px 16px 9px;display:none}
+  .composer.on{display:block}
+  .cbox{display:flex;gap:7px;align-items:flex-end}
   .composer textarea{
     flex:1;min-width:0;height:42px;max-height:8.5em;resize:none;overflow-y:auto;
     padding:10px 13px;border:1px solid var(--rule);border-radius:var(--r-m);
@@ -734,8 +727,33 @@
   }
   .composer textarea:focus{outline:none;border-color:var(--ink)}
   .composer textarea::placeholder{color:var(--ghost)}
-  #saysend{flex:0 0 auto;padding-bottom:12px}
-  #saysend.stop{color:var(--mark)}
+
+  .icon{
+    flex:0 0 auto;width:42px;height:42px;padding:0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    background:none;border:1px solid var(--rule);border-radius:var(--r-m);
+    color:var(--muted);transition:color .15s,border-color .15s,background .15s;
+  }
+  .icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;
+            stroke-linecap:round;stroke-linejoin:round}
+  .icon:hover{color:var(--mark);border-color:var(--mark)}
+  .icon.solid{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .icon.solid:hover{background:var(--mark);border-color:var(--mark);color:var(--on-mark)}
+  .icon.stop svg{display:none}
+  .icon.stop::after{content:"";width:12px;height:12px;border-radius:2px;background:currentColor}
+
+  /* What is going out with what you type, and the one moment a long paste is
+     probably something to read rather than something to ask about. */
+  .riding,.toolong{
+    margin:0 0 8px;padding:0 2px;
+    font-family:"Newsreader",Georgia,serif;font-size:12px;line-height:1.5;color:var(--muted);
+  }
+  .riding b{font-weight:500;color:var(--mark)}
+  .riding button,.toolong button{
+    background:none;border:0;padding:0;cursor:pointer;
+    font-family:inherit;font-size:inherit;color:var(--mark);text-decoration:underline;
+  }
+  .toolong{color:var(--ink)}
 
   /* how much you are about to paste somewhere */
   .psize{
@@ -847,36 +865,41 @@
 
 <!-- SHEET -->
 <div class="sheet empty" id="sheet">
+  <div class="composer" id="composer">
+    <p class="riding" id="riding" hidden></p>
+    <p class="toolong" id="toolong" hidden></p>
+    <div class="cbox">
+      <textarea id="saytxt" rows="1" placeholder="Ask anything&#8230;" spellcheck="false"
+                aria-label="Ask something, or paste a text to read"></textarea>
+      <button class="icon" id="saycopy" aria-label="Copy the prompt to take elsewhere">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="3.5" width="12" height="14" rx="2.5"/><path d="M15.5 20.5h-10a2.5 2.5 0 0 1-2.5-2.5V7"/></svg>
+      </button>
+      <button class="icon solid" id="saysend" aria-label="Send">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5"/><path d="M5.5 11.5 12 4.6l6.5 6.9"/></svg>
+      </button>
+    </div>
+  </div>
   <div class="grab" id="grab" role="button" tabindex="0">
     <span class="count" id="count">0</span>
     <button class="mini" id="modebtn" aria-haspopup="menu" aria-expanded="false" aria-controls="modemenu">Respond &#9662;</button>
     <span class="chev" id="chev">&#9650;</span>
+  </div>
+  <div class="sheetbody" id="sheetbody">
     <div class="baracts">
-      <button class="mini" id="pagenote" title="A note about this page as a whole">&#43; Page</button>
       <button class="mini" id="alwaysnote" title="An instruction to follow throughout">&#43; Always</button>
       <button class="mini" id="scopebar">All pages</button>
       <button class="mini" id="comparebar">Compare</button>
       <button class="mini" id="ctxbar">Context: path</button>
-      <button class="mini solid" id="sendbar" hidden>Ask</button>
       <button class="mini off" id="keybar">Connect a model</button>
-      <button class="mini solid" id="copybar">Copy prompt</button>
       <button class="mini" id="suggestbar" title="Ask a model which passages are worth interrogating">Suggest</button>
-      <button class="mini" id="peekbar">Preview</button>
+      <button class="mini" id="peekbar">Prompt</button>
       <button class="mini" id="replybar">Paste reply</button>
       <span class="psize" id="psize" hidden></span>
       <span class="askrow" id="askstat" role="status" aria-live="polite" hidden></span>
     </div>
-  </div>
-  <div class="sheetbody" id="sheetbody">
     <div id="notelist"></div>
     <div class="previewbox" id="previewbox"><textarea class="preview" id="preview" spellcheck="false"></textarea></div>
   </div>
-</div>
-
-<div class="composer" id="composer">
-  <textarea id="saytxt" rows="1" placeholder="Ask anything&#8230;" spellcheck="false"
-            aria-label="Write a message"></textarea>
-  <button class="mini solid" id="saysend">Send</button>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1060,8 +1083,9 @@
 
   /* How a page came about, as a phrase a model can read. */
   function cameFrom(x,len){
-    if(!x||!x.parents.length) return "The original text:";
+    if(!x) return "The original text:";
     if(x.mine) return "I said:";
+    if(!x.parents.length) return "The original text:";
     var up=nodes[firstParent(x)];
     if(up&&up.mine) return "In answer to my message \u201C"+trim(up.text,len||80)+"\u201D:";
     return "In reply to my note \u201C"+trim(x.note,len||80)+"\u201D:";
@@ -1922,16 +1946,29 @@
   /* Answers come back numbered against the basket, and the basket spans pages,
      so each answer has to be routed to the page its own note sits on. One
      pasted reply can therefore grow branches in several places at once. */
-  /* `side` forces the side-by-side path whatever the Compare toggle says —
-     several models answering one round have nowhere else to land.
+  /* Answers come back numbered against the round, and a round spans pages, so
+     each answer has to be routed to what it answers — a mark's words, or the
+     question page you asked it from. One pasted reply can therefore grow
+     branches in several places at once.
+
+     `round` is passed when the app sent it and already knows what went; a reply
+     you carried back by hand is matched against whatever is pending now, which
+     is the same list rebuilt.
 
      Returns false only when the reply was unreadable and nothing was done with
-     it, so a caller holding the only copy (the API path does) can put it
-     somewhere you can still see it. Declining the confirm below is a decision,
-     not a loss, and counts as handled. */
-  function attachReplies(raw,source,side){
+     it, so a caller holding the only copy can put it somewhere you can still
+     see it. Declining the confirm below is a decision, not a loss. */
+  function attachReplies(raw,source,side,round){
+    var list=round||roundNow("");
     var parsed=parseReply(raw), map=parsed.answers;
-    var list=noteEntries();
+
+    /* One question pending and nothing numbered in the reply: there is only one
+       thing it can be an answer to, so take the whole of it. */
+    if(list.length===1 && !parsed.fenced && !map["1"] && raw.trim()){
+      map={"1":raw.trim()};
+      parsed.fenced=true;
+    }
+
     var found=list.filter(function(e,i){ return map[String(i+1)]; }).length;
     if(!found){ toast("No numbered answers found"); return false; }
     if(!parsed.fenced &&
@@ -1940,10 +1977,19 @@
 
     var hit=0, kept=0, touched={};
 
+    /* Side by side: several models answering one round can't all become the
+       page, so they wait under the mark until you keep one. Only marks can
+       hold them — a question page has nowhere to put a second opinion, so it
+       takes the first answer that arrives. */
     if(compareMode||side){
       list.forEach(function(e,i){
         var ans=map[String(i+1)];
         if(!ans){ kept++; return; }
+        if(!e.note){
+          if(!e.ask&&!e.landed){ e.ask=makeNode(e.text,e.pid,{mine:true}); }
+          if(!e.landed){ e.landed=true; land(landing(e,source),ans.trim()); hit++; }
+          return;
+        }
         var n=e.note;
         n.answers=n.answers||[];
         n.answers.push({id:nextId++, source:source||"Reply "+(n.answers.length+1), text:ans.trim()});
@@ -1955,19 +2001,13 @@
       return true;
     }
 
-    var drop={};
     list.forEach(function(e,i){
       var ans=map[String(i+1)];
       if(!ans){ kept++; return; }
-      promote(e.pid,e.note,ans,source);
+      land(landing(e,source),ans);
+      spend(e);
       hit++;
-      touched[e.pid]=1;
-      (drop[e.pid]=drop[e.pid]||{})[e.note.id]=1;
-    });
-
-    Object.keys(drop).forEach(function(pid){
-      if(!nodes[pid]) return;
-      nodes[pid].notes=nodes[pid].notes.filter(function(n){ return !drop[pid][n.id]; });
+      if(e.pid) touched[e.pid]=1;
     });
 
     render(); refresh(); syncNav();
@@ -2020,18 +2060,23 @@
   var MODES=[
     {k:"rewrite",label:"Rewrite",hint:"Returns the revised text, ready to paste.",
      head:"Below is a piece of text, then my notes on it. Each note is anchored to the exact words that prompted it.",
+     solo:"Apply what I've asked and return the full revised text. Return only the text — no preamble, no summary of what you changed.",
      tail:"Apply my notes and return the full revised text. Return only the text — no preamble, no summary of what you changed, no commentary. If a note is a question rather than an instruction, answer it in a short list underneath the text."},
     {k:"respond",label:"Respond",hint:"Answers your notes in prose. No rewriting.",
      head:"Below are my notes on the text, each anchored to the exact words that prompted it, in reading order.",
+     solo:"Answer it directly. Don't rewrite anything back at me; just talk to me about it.",
      tail:"Respond to each note in order. Some are questions, some are objections, some just mean expand here — infer which from how it's phrased. Don't rewrite the text; just talk to me about the marked parts."},
     {k:"push",label:"Push back",hint:"Argues where you're wrong instead of agreeing.",
      head:"Below are my notes on the text, each anchored to the exact words that prompted it.",
+     solo:"If you think I'm mistaken, say so and make the case. If I'm right, concede it plainly and briefly. I'd rather be argued with than accommodated.",
      tail:"Where you think a note of mine is mistaken, say so and make the case. Where I'm right, concede it plainly and briefly. I'd rather be argued with than accommodated, so don't soften a disagreement to keep things pleasant."},
     {k:"options",label:"Options",hint:"Gives you a few alternatives per note, not one answer.",
      head:"Below are my notes on the text, each anchored to the exact words that prompted it.",
+     solo:"Give two or three genuinely different answers rather than one, and say in a few words what each trades off. Don't pick a favourite unless I asked.",
      tail:"For each note, give two or three genuinely different alternatives rather than one answer, and say in a few words what each one trades off. Don't pick a favourite unless I asked."},
     {k:"check",label:"Check",hint:"Verifies the marked claims.",
      head:"Below are the parts of the text I want checked, each anchored to the exact words in question.",
+     solo:"Tell me whether it holds up, how sure you are, and what it rests on. Say plainly when you can't verify something rather than guessing.",
      tail:"For each marked passage, tell me whether the claim holds up, how sure you are, and what it rests on. Say plainly when you can't verify something rather than guessing."}
   ];
   var mode=MODES[1];
@@ -2048,7 +2093,7 @@
   function intentLegend(list){
     var seen={}, out=[];
     list.forEach(function(e){
-      var m=e.note.mode&&modeByKey(e.note.mode);
+      var m=e.note&&e.note.mode&&modeByKey(e.note.mode);
       if(!m||m.k===mode.k||seen[m.k]) return;
       seen[m.k]=1;
       out.push("  "+m.label.toLowerCase()+" — "+m.tail);
@@ -2058,22 +2103,16 @@
            "intent for that note instead of the general instruction above:\n"+out.join("\n");
   }
 
-  function standingBlock(){
-    if(!standing.length) return "";
+  /* Inlined when the prompt travels alone; sent as a system message when it
+     goes over the wire. Same words either way. */
+  function standingBlock(inline){
+    if(inline===false||!standing.length) return "";
     return "\n\nThroughout, whichever note you are answering:\n"+
            standing.map(function(s){ return "- "+s.text; }).join("\n");
   }
 
   /* How a note is introduced in the prompt: its number, where it sits, and what
      it is about. */
-  function noteHeading(e,i,pageNum){
-    var where=pageNum?"on page "+pageNum+", ":"";
-    var m=e.note.mode&&modeByKey(e.note.mode);
-    var tag=(m&&m.k!==mode.k)?" — "+m.label.toLowerCase():"";
-    if(isPageNote(e.note)) return "["+(i+1)+"] "+where+"about this page as a whole"+tag;
-    return "["+(i+1)+"] "+where+"“"+quoteFor(e.note,toksFor(e.pid))+"”"+tag;
-  }
-
   var BLOCK="\n\nWhen you're done, end your message with a block in exactly this format, so my app can put your answers back beside the notes that prompted them:\n\n[[notes]]\n1 \u2192 your response to note 1\n2 \u2192 your response to note 2\n[[/notes]]\n\nWrite however you like above the block. Use the note numbers exactly as given, keep each answer on one line, and don't repeat my text back inside the block.";
 
   function pathTo(id){
@@ -2118,12 +2157,20 @@
            "My note was: "+n.note+"\n\n";
   }
 
-  function contextBlock(){
+  /* `inline` is what separates the two dispatches. Carried to another window
+     the prompt has to say everything in its own text, so the line of talk this
+     page hangs off is written out in full. Posted to the API it goes as real
+     user/assistant turns instead, and this block leaves it out.
+
+     Only the path is packaged that way. Off-path branches were never part of
+     this conversation, and the ledger is a summary rather than something
+     anyone said, so both stay in the text either way. */
+  function contextBlock(inline){
     var n=node();
     if(!n) return "";
     var out="";
 
-    if(ctxMode!=="page" && n.parents.length){
+    if(inline!==false && ctxMode!=="page" && n.parents.length){
       var path=pathTo(n.id);
       out+="--- HOW WE GOT HERE ---\n";
       path.slice(0,-1).forEach(function(id,i){
@@ -2149,12 +2196,12 @@
 
     var asked={};
     noteEntries().forEach(function(e){ asked[e.note.id]=1; });
-    var led=ledger(n.id,asked);
+    var led=(inline===false&&ctxMode!=="all")?[]:ledger(n.id,asked);
     if(led.length){
       out+="--- THREADS SO FAR ---\n"+led.join("\n")+
            "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
     }
-    return out+provenance(n);
+    return out+(inline===false?"":provenance(n));
   }
 
   /* How a page came to exist, in one line, so a note deep in a branch arrives
@@ -2169,60 +2216,186 @@
            (x.parents.length>1?", which answered a note across "+x.parents.length+" pages":"");
   }
 
-  function buildPrompt(){
-    var list=noteEntries();
-    if(!list.length) return "";
+  /* ---------------- the round ----------------
+     One basket, two ways to empty it.
 
-    /* One page's worth of notes reads better as a single text with notes on it,
-       which is what this always was. */
-    var used=[], seen={};
-    list.forEach(function(e){ if(e.pid&&!seen[e.pid]){ seen[e.pid]=1; used.push(e.pid); } });
-    if(used.length<=1){
-      var out=mode.head+"\n\n"+contextBlock();
-      out+="--- TEXT ---\n"+sourceText()+"\n--- END TEXT ---\n\n--- MY NOTES ---\n";
-      list.forEach(function(e,i){
-        out+=noteHeading(e,i,0)+"\n    \u2192 "+e.note.text+"\n\n";
-      });
-      out+="--- END NOTES ---\n\n"+mode.tail+intentLegend(list)+standingBlock()+BLOCK;
+     A round is every mark you have left plus whatever is in the message box.
+     The box is not a second channel: what you type is a question about the page
+     you are on, it has just not been asked yet. So marking two phrases and
+     typing a question sends all three, and either dispatch sends the same
+     round — you carry it to another window, or the app posts it. The tree
+     cannot tell afterwards which one happened, which is the whole point.
+
+     A question you asked and never got an answer to is still pending, so it
+     rejoins the round on its own. That is what makes a failed send, or a
+     prompt you copied out three days ago, resumable rather than stuck. */
+
+  function sayText(){ return ($("saytxt").value||"").trim(); }
+
+  function roundNow(say){
+    say=(say==null?sayText():say);
+    var list=noteEntries().map(function(e){ return {pid:e.pid, note:e.note, text:e.note.text}; });
+    var n=node();
+    if(n&&n.mine&&!n.kids.length) list.push({ask:n.id, pid:firstParent(n), text:n.text});
+    if(say) list.push({say:say, pid:curId, text:say});
+    return list;
+  }
+
+  /* Where an answer to this question lands. A mark's answer hangs off the words
+     it answers. A question is something you said rather than a mark on a
+     phrase, so it becomes a page of its own with the answer beneath it — which
+     is why your questions show up in the map and can be marked up like
+     anything else. Made empty here and filled when the words arrive. */
+  function landing(e,source){
+    if(e.ask) return makeNode("",e.ask,{source:source});
+    if(e.say) return makeNode("",makeNode(e.say,e.pid,{mine:true}),{source:source});
+    return promote(e.pid,e.note,"",source);
+  }
+
+  /* Undo a landing that came to nothing, including the question page it was
+     hung from if that page was made for it moments ago. */
+  function unland(id){
+    if(!nodes[id]) return;
+    var up=firstParent(nodes[id]);
+    dropPage(id);
+    if(up&&nodes[up]&&nodes[up].mine&&!nodes[up].kids.length&&!nodes[up].notes.length)
+      dropPage(up);
+  }
+
+  function spend(e){
+    if(e.note&&e.pid) dropNote(e.pid,e.note);
+  }
+
+  /* How a question is introduced in the prompt. A mark arrives with the words
+     it is about; a question arrives as itself. */
+  function askLine(e,num,pageNum){
+    var head=num?"["+num+"]"+(pageNum?" on page "+pageNum+",":"")+" ":"";
+    if(e.note&&!isPageNote(e.note)){
+      var m=e.note.mode&&modeByKey(e.note.mode);
+      return head+"About “"+quoteFor(e.note,toksFor(e.pid))+"”"+
+             (m&&m.k!==mode.k?" — "+m.label.toLowerCase():"")+
+             "\n    → "+e.text;
+    }
+    return head+"I said:\n    → "+e.text;
+  }
+
+  var SOLO="\n\nAnswer in prose. Don't number it, don't head it, and don't quote my text back at me.";
+
+  /* The one prompt builder. Both dispatches call it; `inline` is the only
+     difference between what they get, and it never touches the part you edit. */
+  function buildPrompt(opts){
+    opts=opts||{};
+    var list=opts.round||roundNow(opts.say);
+    if(!list.length) return "";
+    var inline=opts.inline!==false;
+
+    /* One question needs no protocol: there is only one place its answer can
+       go, so it can be asked plainly and streamed as it is written. */
+    if(list.length===1){
+      var e=list[0], anchored=!!(e.note&&!isPageNote(e.note));
+      var ctx=contextBlock(inline);
+      var src=inline?pageTextFor(e):"";
+
+      /* Nothing marked, nothing read, nothing said before: the prompt is the
+         question. Framing it would only be the app talking over you. */
+      if(!anchored&&!ctx&&!src) return e.text+standingBlock(inline);
+
+      var out=anchored
+        ? mode.head+"\n\n"
+        : "Below is what I'm reading, then something I want to ask about it.\n\n";
+      out+=ctx;
+      if(src) out+="--- THE PAGE I'M READING ---\n"+src+"\n--- END ---\n\n";
+      out+=askLine(e,0)+"\n\n"+mode.solo+standingBlock(inline)+SOLO;
       return out;
     }
 
-    /* Notes spread across the thread. Every page carrying one goes in whole, in
+    var used=[], seen={};
+    list.forEach(function(e){ if(e.pid&&!seen[e.pid]){ seen[e.pid]=1; used.push(e.pid); } });
+
+    /* One page's worth reads better as a single text with notes on it, which is
+       what this always was. */
+    if(used.length<=1){
+      var one=mode.head+"\n\n"+contextBlock(inline);
+      var page=inline?sourceText():"";
+      if(page) one+="--- TEXT ---\n"+page+"\n--- END TEXT ---\n\n";
+      one+="--- MY NOTES ---\n";
+      list.forEach(function(e,i){ one+=askLine(e,i+1)+"\n\n"; });
+      one+="--- END NOTES ---\n\n"+mode.tail+intentLegend(list)+standingBlock(inline)+BLOCK;
+      return one;
+    }
+
+    /* Spread across the thread. Every page carrying one goes in whole, in
        reading order, and the notes are numbered straight through them so a
        single reply can answer all of them at once. */
     var numOfPage={};
     used.forEach(function(pid,i){ numOfPage[pid]=i+1; });
 
-    var out=mode.head+"\n\nMy notes are spread across several pages of a branching "+
-            "conversation. Each page is below, then every note in reading order, "+
-            "each one marked with the page it sits on and the words it is about.\n\n";
+    var out2=mode.head+"\n\nMy notes are spread across several pages of a branching "+
+             "conversation. Each page is below, then every note in reading order, "+
+             "each one marked with the page it sits on and the words it is about.\n\n";
 
     used.forEach(function(pid,i){
-      out+="--- PAGE "+(i+1)+" ("+pageHeading(pid,numOfPage)+") ---\n"+
-           nodes[pid].text.replace(/\r/g,"").trim()+"\n--- END PAGE "+(i+1)+" ---\n\n";
+      out2+="--- PAGE "+(i+1)+" ("+pageHeading(pid,numOfPage)+") ---\n"+
+            nodes[pid].text.replace(/\r/g,"").trim()+"\n--- END PAGE "+(i+1)+" ---\n\n";
     });
 
     var asked={};
-    list.forEach(function(e){ asked[e.note.id]=1; });
+    list.forEach(function(e){ if(e.note) asked[e.note.id]=1; });
     var led=ledger(null,asked);
     if(led.length){
-      out+="--- THREADS SO FAR ---\n"+led.join("\n")+
-           "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
+      out2+="--- THREADS SO FAR ---\n"+led.join("\n")+
+            "\nDon't reopen anything already marked resolved or dropped unless I ask.\n--- END ---\n\n";
     }
 
-    out+="--- MY NOTES ---\n";
-    list.forEach(function(e,i){
-      out+=noteHeading(e,i,numOfPage[e.pid])+"\n    \u2192 "+e.note.text+"\n\n";
+    out2+="--- MY NOTES ---\n";
+    list.forEach(function(e,i){ out2+=askLine(e,i+1,numOfPage[e.pid])+"\n\n"; });
+    out2+="--- END NOTES ---\n\n"+mode.tail+
+          " Answer every note, wherever it sits — a note on one page may well "+
+          "bear on another, so say so when it does."+
+          intentLegend(list)+standingBlock(inline)+BLOCK;
+    return out2;
+  }
+
+  function pageTextFor(e){
+    var id=e.ask?firstParent(nodes[e.ask]):e.pid;
+    return id&&nodes[id]?nodes[id].text.replace(/\r/g,"").trim():"";
+  }
+
+  /* The path this round hangs off, as real turns, with the round itself as the
+     last thing said. A round spread across several pages has no single line of
+     talk behind it, so it carries its context in the text instead. */
+  function turnMessages(list,tail){
+    var msgs=[];
+    var sys=standing.map(function(s){ return s.text; }).filter(Boolean);
+    if(sys.length) msgs.push({role:"system",content:sys.join("\n")});
+
+    var pid=list.length?(list[0].ask?firstParent(nodes[list[0].ask]):list[0].pid):null;
+    var spread=list.some(function(e){
+      return (e.ask?firstParent(nodes[e.ask]):e.pid)!==pid;
     });
-    out+="--- END NOTES ---\n\n"+mode.tail+
-         " Answer every note, wherever it sits \u2014 a note on one page may well "+
-         "bear on another, so say so when it does."+
-         intentLegend(list)+standingBlock()+BLOCK;
+    if(!spread&&pid&&nodes[pid]&&ctxMode!=="page") msgs=msgs.concat(turnsFor(pid));
+
+    msgs.push({role:"user",content:tail});
+
+    /* Some models refuse two turns in the same role back to back. */
+    var out=[];
+    msgs.forEach(function(m){
+      var last=out[out.length-1];
+      if(last&&last.role===m.role) last.content+="\n\n"+m.content;
+      else out.push({role:m.role,content:m.content});
+    });
     return out;
   }
 
+  /* What actually goes over the wire. Edit the prompt by hand and that is sent
+     verbatim as one message — if you wrote it, it is not the app's to repackage. */
+  function outgoing(list){
+    if(promptDirty) return [{role:"user",content:prevEl.value}];
+    return turnMessages(list,buildPrompt({round:list,inline:false}));
+  }
+
   function setMode(m){
-    mode=m; syncMode(); prevEl.value=buildPrompt(); promptDirty=false;
+    mode=m; syncMode(); prevEl.value=buildPrompt({inline:true}); promptDirty=false;
     showMenu(false);
   }
   function drawMenu(){
@@ -2269,10 +2442,6 @@
 
   /* A note about the page rather than a run of words in it. Same card, same
      microphone — only the anchor differs. */
-  function askPageNote(){
-    if(!node()) return;
-    askType({id:curId, s:0, e:0, whole:true});
-  }
   function askStanding(){
     standingTarget=true;
     typeTarget=null;
@@ -2320,7 +2489,9 @@
     /* The bar carries the controls for making a note that isn't about any
        particular word, so it has to be reachable before the first note exists.
        It hides only when there is no page open at all. */
-    sheetEl.classList.toggle("empty", tree ? list.length===0 : !curId);
+    /* The sheet holds the message box now, so in the reader it is never
+       stowed completely — there would be nowhere left to type. */
+    sheetEl.classList.toggle("empty", tree && list.length===0);
     listEl.innerHTML="";
 
     /* Standing instructions sit above the numbered notes, unnumbered, so they
@@ -2432,7 +2603,7 @@
       d.appendChild(num); d.appendChild(body); d.appendChild(kill);
       listEl.appendChild(d);
     });
-    prevEl.value=inTree()?treePrompt():buildPrompt(); promptDirty=false;
+    prevEl.value=inTree()?treePrompt():buildPrompt({inline:true}); promptDirty=false;
     syncCtx();
     syncSize();
     saveSoon();
@@ -2549,15 +2720,7 @@
     } else fallback();
   }
 
-  function doCopy(){
-    var txt=promptDirty?prevEl.value:(inTree()?treePrompt():buildPrompt());
-    if(!txt){ toast("No notes yet"); return; }
-    copyText(txt,"Copied",function(){
-      sheetEl.classList.add("open"); chevEl.innerHTML="\u25BC";
-      prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
-      toast("Select all and copy");
-    });
-  }
+
 
   function openReply(){
     treeReplyMode=inTree();
@@ -2757,23 +2920,108 @@
      same parser the paste box uses. Several models go out at once: their
      answers cannot all become pages off the same note, so they arrive side by
      side however the Compare toggle is set, and you keep the one you want. */
-  function askPrompt(){
+  /* ---------------- sending the round ----------------
+     One question streams straight into the page it is going to become: there is
+     only one place its answer can go, so no protocol is needed and the words
+     can appear as they are written. Several have to come back numbered so each
+     can be routed to its own words, and that means waiting for the whole reply.
+
+     Several models is the same fork: their answers can't all become the page,
+     so a shortlist always takes the numbered route and lands side by side. */
+  function sendRound(){
     if(orFlight){ cancelFlight(); return; }
     if(!orConnected()){ openKey(); return; }
-    var tree=inTree();
-    var txt=promptDirty?prevEl.value:(tree?treePrompt():buildPrompt());
-    if(!txt||!txt.trim()){ toast("No notes yet"); return; }
+    if(inTree()) return sendTree();
 
-    /* In the map an answer becomes a page the moment it lands, with no
-       side-by-side step to hold a second opinion, so only the first goes. */
-    var out=tree?orModels.slice(0,1):orModels.slice();
-    var fan=out.length>1;
+    var say=sayText();
+    var list=roundNow(say);
+    if(!list.length){ $("saytxt").focus(); return; }
+
+    if(list.length===1 && orModels.length===1) return streamOne(list[0],say);
+    return numberedRound(list,say);
+  }
+
+  function clearBox(say){
+    if(!say) return;
+    $("saytxt").value=""; autogrow();
+  }
+  function restoreBox(say){
+    if(!say||sayText()) return;
+    $("saytxt").value=say; autogrow();
+  }
+
+  /* Asked one thing plainly, a model may still wrap the answer in the block it
+     has seen us ask for on other rounds. Take what is inside rather than
+     leaving you the scaffolding. */
+  function unfence(text){
+    var p=parseReply(text);
+    if(!p.fenced) return text;
+    var keys=Object.keys(p.answers);
+    return keys.length===1?p.answers[keys[0]]:text;
+  }
+
+  function streamOne(e,say){
+    var model=orModels[0];
+    /* Built before the pages are made: a question must not arrive in its own
+       context as a thread waiting on an answer. */
+    var msgs=outgoing([e]);
+    var target=landing(e,shortModel(model));
+    if(target==null){ toast("Nowhere to put that"); return; }
+    beginFlight(shortModel(model),1,true);
+    var mine=orFlight, sig=orFlight.ctl?orFlight.ctl.signal:undefined;
+
+    clearBox(say);
+    liveId=target; liveText="";
+    focusNode(target); renderLive(); toBottom(); syncSay();
+
+    (canStream?orStream(model,msgs,sig,function(t){ liveText=t; paintSoon(); })
+              :orAsk(model,msgs,sig)
+    ).then(function(text){
+      if(orFlight===mine) endFlight();
+      endLive();
+      if(!nodes[target]) return;
+      /* Stopping can end a stream cleanly rather than tearing it, so this is
+         also the path a half-written answer comes back on. Keep it either way. */
+      spend(e);
+      land(target,unfence(text));
+    },function(err){
+      var quit=!!(err&&err.name==="AbortError"), partial=liveText.trim();
+      if(orFlight===mine) endFlight();
+      endLive();
+      if(!nodes[target]){ syncSay(); return; }
+      if(quit&&partial){ spend(e); land(target,unfence(partial)); return; }
+      /* Nothing came of it, so nothing is left behind and the question goes
+         back where it came from — the box, or the mark it was made on. */
+      var back=e.pid&&nodes[e.pid]?e.pid:firstParent(nodes[target]);
+      unland(target);
+      restoreBox(say);
+      if(back&&nodes[back]) focusNode(back);
+      else if(Object.keys(nodes).length) focusNode(rootId());
+      else { curId=null; words=[]; TOK=[]; readerEl.innerHTML=""; refresh(); syncNav(); toEditor(); }
+      if(!quit) toast(err.message);
+      syncSay();
+    });
+  }
+
+  function numberedRound(list,say){
+    var out=orModels.slice(), fan=out.length>1;
+    var msgs=outgoing(list);
     beginFlight(fan?out.length+" models":shortModel(out[0]),out.length);
     var mine=orFlight, sig=orFlight.ctl?orFlight.ctl.signal:undefined;
     var got=[], errs=[];
 
+    clearBox(say);
+    /* The box's question has to exist as a page before answers can be routed
+       to it, and it is a question you asked whether or not one comes back. */
+    list.forEach(function(e){
+      if(!e.say) return;
+      e.ask=makeNode(e.say,e.pid,{mine:true});
+      delete e.say;
+    });
+    render(); refresh();
+
     Promise.all(out.map(function(m){
-      return justAsk(m,txt,sig).then(function(reply){
+      return orAsk(m,msgs,sig).then(function(reply){
         got.push({model:m,text:reply});
         if(orFlight===mine){ orFlight.done++; askStatus(); }
       },function(err){
@@ -2788,12 +3036,50 @@
       got.sort(function(a,b){ return out.indexOf(a.model)-out.indexOf(b.model); });
       var lost=[];
       got.forEach(function(r){
-        var ok=tree?attachTreeReplies(r.text):attachReplies(r.text,shortModel(r.model),fan);
-        if(!ok) lost.push(r.text);
+        if(!attachReplies(r.text,shortModel(r.model),fan,list)) lost.push(r.text);
       });
       if(lost.length) stranded(lost,"Couldn't read that answer — it's in the box");
       else if(errs.length) toast(errs[0]);
       else if(fan) toast(got.length+" models answered — keep the ones you want");
+    });
+  }
+
+  /* The map has its own basket and its own prompt, and no message box, so it
+     keeps the round trip it always had. */
+  function sendTree(){
+    var txt=promptDirty?prevEl.value:treePrompt();
+    if(!txt||!txt.trim()){ toast("No notes yet"); return; }
+    var model=orModels[0];
+    beginFlight(shortModel(model),1);
+    var mine=orFlight;
+    justAsk(model,txt,orFlight.ctl?orFlight.ctl.signal:undefined).then(function(reply){
+      if(orFlight!==mine) return;
+      endFlight();
+      if(!attachTreeReplies(reply)) stranded([reply],"Couldn't read that answer — it's in the box");
+    },function(err){
+      if(err&&err.name==="AbortError") return;
+      if(orFlight===mine) endFlight();
+      toast(err.message);
+    });
+  }
+
+  /* Carrying the round out by hand. The box's question becomes a page first,
+     exactly as it would if you had sent it — otherwise there would be nothing
+     for the reply to attach to when it comes back hours later. */
+  function copyRound(){
+    var say=sayText();
+    var list=roundNow(say);
+    var txt=promptDirty?prevEl.value:(inTree()?treePrompt():buildPrompt({round:list,inline:true}));
+    if(!txt){ toast("Nothing to send yet"); return; }
+    if(say&&!inTree()){
+      var asked=makeNode(say,curId,{mine:true});
+      clearBox(say);
+      focusNode(asked);
+    }
+    copyText(txt,"Copied — paste the reply back when you have it",function(){
+      sheetEl.classList.add("open"); chevEl.innerHTML="▼";
+      prevBox.classList.add("on"); prevEl.focus(); prevEl.select();
+      toast("Select all and copy");
     });
   }
 
@@ -2981,64 +3267,6 @@
     delete nodes[id];
   }
 
-  function sendMessage(say){
-    say=(say||"").trim();
-    if(!say) return;
-    if(orFlight){ toast("Still waiting on the last one"); return; }
-    if(!orConnected()){ openKey(); return; }
-
-    var model=orModels[0], back=curId;
-    /* Whatever is open is what is being talked about, so the message hangs off
-       it. On a blank start there is nothing yet and it becomes the root: the
-       thread begins with something you said. */
-    var mineId=makeNode(say,back,{mine:true});
-    var replyId=makeNode("",mineId,{source:shortModel(model)});
-
-    beginFlight(shortModel(model),1,true);
-    var mine=orFlight, sig=orFlight.ctl?orFlight.ctl.signal:undefined;
-
-    liveId=replyId; liveText="";
-    focusNode(replyId);
-    renderLive(); toBottom(); syncSay();
-
-    var msgs=chatMessages(mineId);
-    (canStream
-      ? orStream(model,msgs,sig,function(t){ liveText=t; paintSoon(); })
-      : orAsk(model,msgs,sig)
-    ).then(function(text){
-      if(orFlight===mine) endFlight();
-      endLive();
-      /* New text, or a thread loaded over the top, can retire the page an
-         answer was headed for while it was still being written. */
-      if(!nodes[replyId]) return;
-      /* Stopping can end the stream cleanly rather than tearing it, in which
-         case this is the success path carrying a half-written answer. Keep it
-         either way: cancelling should cost you nothing that had arrived. */
-      land(replyId,text);
-    },function(err){
-      var quit=!!(err&&err.name==="AbortError"), partial=liveText.trim();
-      if(orFlight===mine) endFlight();
-      endLive();
-      if(!nodes[replyId]||!nodes[mineId]){ syncSay(); return; }
-
-      if(quit&&partial){
-        /* Stopped part-way: what arrived is worth keeping, and it is a page
-           like any other, so it can be marked up or followed straight on. */
-        land(replyId,partial);
-        return;
-      }
-      /* Nothing came of the turn, so nothing is left behind — and the message
-         goes back in the box rather than being retyped. */
-      dropPage(replyId); dropPage(mineId);
-      $("saytxt").value=say; autogrow();
-      if(back&&nodes[back]) focusNode(back);
-      else if(Object.keys(nodes).length) focusNode(rootId());
-      else { curId=null; words=[]; TOK=[]; readerEl.innerHTML=""; refresh(); syncNav(); toEditor(); }
-      if(!quit) toast(err.message);
-      syncSay();
-    });
-  }
-
   /* An answer arrives on its page whether or not you stayed to watch it. You
      are only carried back to it if you never left. */
   function land(id,text){
@@ -3125,31 +3353,89 @@
       Math.round(parseFloat(getComputedStyle(t).fontSize||"15")*8.5))+"px";
   }
 
+  /* The box is there whether or not a model is connected: without one you
+     carry the round out yourself, which is the app's floor and always was. */
+  /* How much of the sheet stays on screen when it is down: the message box
+     plus the bar, whatever they currently measure. The box grows as you type
+     and the strip grows with it. */
+  function sizeSheet(){
+    var peek=$("composer").offsetHeight+$("grab").offsetHeight;
+    if(peek>8) sheetEl.style.setProperty("--peek",peek+"px");
+  }
+
   function syncSay(){
-    var box=$("composer"), send=$("saysend");
-    box.classList.toggle("on",orConnected()&&!inTree());
-    var busy=!!orFlight&&liveId!=null;
-    send.textContent=busy?"Stop":"Send";
+    var box=$("composer"), send=$("saysend"), busy=!!orFlight&&liveId!=null;
+    box.classList.toggle("on",!inTree());
     send.classList.toggle("stop",busy);
+    send.setAttribute("aria-label",busy?"Stop":"Send");
     send.title=busy?"Stop, and keep whatever has arrived"
-                   :"Send. Hold it to speak instead.";
-    $("saytxt").placeholder=curId?"Say something about this…":"Ask anything…";
+              :orConnected()?"Send it. Hold to speak instead."
+                            :"Connect a model and it goes straight out";
+    $("saycopy").title="Copy the whole prompt to take to another window";
+
+    $("saytxt").placeholder=
+      !curId ? "Ask something, or paste a text to read…"
+             : "Say something about this…";
+
+    /* What else is going out with whatever you type. */
+    /* Typing changes what would go out, so the prompt box has to keep up. */
+    if(!promptDirty&&!inTree()) prevEl.value=buildPrompt({inline:true});
+    syncSize();
+
+    var marks=noteEntries().length, row=$("riding");
+    row.hidden=!marks||inTree();
+    if(marks){
+      row.textContent="";
+      var b=document.createElement("b");
+      b.textContent=marks+(marks>1?" notes":" note");
+      row.appendChild(b);
+      row.appendChild(document.createTextNode(" go"+(marks>1?"":"es")+" out with this — "));
+      var open=document.createElement("button");
+      open.type="button";
+      open.textContent="see them";
+      open.addEventListener("click",function(e){
+        e.stopPropagation();
+        sheetEl.classList.add("open"); chevEl.innerHTML="▼";
+      });
+      row.appendChild(open);
+    }
+    sizeSheet();
+
     var head=$("headnote");
     if(head) head.textContent=orConnected()
       ? "Ask a question below, or paste something to read — then hold any word to speak a note about it, and the answer branches out of your mark."
-      : "Hold any word to record a note right there, tap it to type one instead, and drag while holding to cover a whole phrase.";
+      : "Paste something to read and hold any word to note it, or ask a question below and carry the prompt to any chat window.";
+  }
+
+  /* A long paste on a blank screen is almost never a question. Offered rather
+     than assumed, and only in the moment it could be true. */
+  function syncLong(){
+    var row=$("toolong"), v=$("saytxt").value, words=v.trim().split(/\s+/).length;
+    var looks=!curId && !inTree() && (v.length>340||/\n\s*\n/.test(v));
+    row.hidden=!looks;
+    if(!looks) return;
+    row.textContent="";
+    row.appendChild(document.createTextNode(
+      (words>=1000?(Math.round(words/100)/10)+"k":words)+" words — "));
+    var b=document.createElement("button");
+    b.type="button";
+    b.textContent="open it to read and mark up instead?";
+    b.addEventListener("click",function(e){
+      e.stopPropagation();
+      var t=$("saytxt").value;
+      $("saytxt").value=""; autogrow(); syncLong();
+      load(t);
+    });
+    row.appendChild(b);
   }
 
   function saySend(){
     if(orFlight&&liveId!=null){ cancelFlight(); return; }
-    var t=$("saytxt"), v=t.value;
-    if(!v.trim()){ t.focus(); return; }
-    t.value=""; autogrow();
-    sendMessage(v);
+    sendRound();
   }
 
   holdToSpeak($("saysend"),function(voice){
-    if(!voice||!SR){ saySend(); return; }
+    if(!voice||!SR||!orConnected()){ saySend(); return; }
     if(orFlight&&liveId!=null){ cancelFlight(); return; }
     /* Dictation lands in the box rather than going straight out: a misheard
        note can be fixed in the sheet, but a sent message is spent. */
@@ -3175,7 +3461,9 @@
     document.addEventListener("pointerup",stop);
   }
 
-  $("saytxt").addEventListener("input",autogrow);
+  $("saytxt").addEventListener("input",function(){ autogrow(); syncLong(); syncSay(); });
+  window.addEventListener("resize",sizeSheet);
+  $("saycopy").addEventListener("click",function(e){ e.stopPropagation(); copyRound(); });
   $("saytxt").addEventListener("keydown",function(e){
     /* On a phone Enter is how you get a new line and the button is how you
        send; on a keyboard it is the other way round. */
@@ -3185,13 +3473,7 @@
   });
 
   function syncAsk(){
-    var send=$("sendbar"), key=$("keybar"), ready=orConnected();
-    send.hidden=!ready;
-    send.textContent=orFlight?"Asking…":"Ask";
-    send.classList.toggle("busy",!!orFlight);
-    send.title=orFlight
-      ? "Tap to stop waiting"
-      : "Send this prompt to "+orModels.join(", ")+" and put the answers back beside the notes";
+    var key=$("keybar"), ready=orConnected();
     var label=ready
       ? (orModels.length>1?orModels.length+" models":shortModel(orModels[0]))
       : apiKey?"Pick a model":"Connect a model";
@@ -3204,10 +3486,9 @@
         ? "The key is saved. Choose which model it should ask."
         : "Add an OpenRouter key and Meristem can ask for you, instead of you carrying the prompt somewhere";
     syncSay();
+    /* Only an invitation. Once a model is connected the bar names it. */
     var cb=$("connectbtn");
-    if(cb) cb.textContent=ready&&orModels.length>1
-      ? label+" · "+shortModel(orModels[0])+" first"
-      : label;
+    if(cb){ cb.hidden=ready; cb.textContent=label; }
   }
 
   /* ---- picking models ----
@@ -3340,7 +3621,6 @@
     });
   }
 
-  $("sendbar").addEventListener("click",function(e){ e.stopPropagation(); askPrompt(); });
   $("keybar").addEventListener("click",function(e){ e.stopPropagation(); openKey(); });
   $("connectbtn").addEventListener("click",openKey);
   $("keycancel").addEventListener("click",function(){ closeOverlay($("keyin")); });
@@ -3401,8 +3681,10 @@
       if(e.pid&&!seen[e.pid]){ seen[e.pid]=1; spread++; }
     });
 
-    $("pagenote").hidden=inTree()||!node();
-    $("alwaysnote").hidden=inTree();
+    $("alwaysnote").hidden=inTree()||!node();
+    $("modebtn").hidden=!inTree()&&!node();
+    $("count").hidden=!inTree()&&!node();
+    $("replybar").hidden=inTree()?false:!node();
 
     $("suggestbar").hidden=inTree()||!node();
     syncAsk();
@@ -3485,8 +3767,8 @@
 
   /* Speak a note that has no word range: the caption opens, and letting go
      anywhere files it. Mirrors the word gesture without the drag. */
-  function speakUnanchored(kind){
-    if(!voiceMode){ kind==="page"?askPageNote():askStanding(); return; }
+  function speakUnanchored(){
+    if(!voiceMode){ askStanding(); return; }
     heard=""; capTxt.textContent="";
     capEl.classList.add("on"); capEl.style.bottom="110px";
     if(navigator.vibrate) navigator.vibrate(8);
@@ -3497,27 +3779,21 @@
       if(listening&&rec){ try{ rec.stop(); }catch(e){} }
       setTimeout(function(){
         var said=heard.trim();
-        if(!said){ kind==="page"?askPageNote():askStanding(); return; }
-        if(kind==="page") addNote(0,0,said,curId,true);
-        else addStanding(said);
+        if(!said){ askStanding(); return; }
+        addStanding(said);
       },260);
     };
     document.addEventListener("pointerup",stop);
   }
 
-  holdToSpeak($("pagenote"),function(voice){
-    if(!node()) return;
-    voice?speakUnanchored("page"):askPageNote();
-  });
   holdToSpeak($("alwaysnote"),function(voice){
-    voice?speakUnanchored("always"):askStanding();
+    voice?speakUnanchored():askStanding();
   });
   $("ctxbar").addEventListener("click",function(e){
     e.stopPropagation();
     ctxMode=CTX[(CTX.indexOf(ctxMode)+1)%CTX.length];
     syncCtx(); refresh();
   });
-  $("copybar").addEventListener("click",function(e){ e.stopPropagation(); doCopy(); });
 
   /* Asks for an agenda rather than answers. With a model connected it goes
      out and the notes come straight back; without one it is copied, and the
@@ -4025,6 +4301,21 @@
 
   function toEditor(){
     var keep=$("scroller").scrollTop;
+    /* Nothing open: the message box is the only input, so the paste surface
+       stays out of the way until there is a page to edit. */
+    if(!curId){
+      readerEl.innerHTML="";
+      readerEl.removeAttribute("contenteditable");
+      readerEl.classList.remove("editing");
+      document.body.classList.remove("reading");
+      $("setup").hidden=false;
+      $("edit").hidden=true; $("reset").hidden=true; $("go").hidden=true;
+      sheetEl.classList.remove("open"); chevEl.innerHTML="▲";
+      prevBox.classList.remove("on");
+      refresh(); syncNav();
+      $("saytxt").focus({preventScroll:true});
+      return;
+    }
     // Do NOT rebuild the DOM. render() has already drawn the paragraphs;
     // editing just makes those same nodes writable, so nothing can shift.
     if(!words.length){
