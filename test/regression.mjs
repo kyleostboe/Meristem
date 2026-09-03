@@ -1730,6 +1730,137 @@ console.log('\nthe context choice is a standing preference, not per-thread');
   await page.close_();
 }
 
+console.log('\nthe rail appears only when there is something to scroll');
+{
+  const page = await newPage();
+  eq('a blank screen fits, so there is no rail',
+     await page.locator('#rail').isVisible(), false);
+
+  /* The suite's window is tall enough to hold the sample text whole. A phone
+   * is not, which is the shape the rail exists for. */
+  await page.setViewportSize({ width: 430, height: 720 });
+  await page.click('#sample'); await page.waitForTimeout(500);
+  eq('a text does not, so there is', await page.locator('#rail').isVisible(), true);
+
+  const thumb = await page.locator('#railthumb').boundingBox();
+  const rail = await page.locator('#rail').boundingBox();
+  check('the thumb is shorter than the track it runs in', thumb.height < rail.height, '');
+  check('but never too short to catch', thumb.height >= 34, '');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\ndragging the rail scrolls the text, and pressing it jumps');
+{
+  const page = await newPage();
+  await page.setViewportSize({ width: 430, height: 720 });
+  await page.click('#sample'); await page.waitForTimeout(500);
+  const top = await page.evaluate(() => document.getElementById('scroller').scrollTop);
+  eq('starts at the top', top, 0);
+
+  const rail = await page.locator('#rail').boundingBox();
+  const thumb = await page.locator('#railthumb').boundingBox();
+  const x = rail.x + rail.width / 2;
+
+  // take hold of the thumb and drag it down the track
+  await page.mouse.move(x, thumb.y + thumb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, rail.y + rail.height + 40, { steps: 8 });   // past the end, to test the clamp
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+
+  const deep = await page.evaluate(() => {
+    const s = document.getElementById('scroller');
+    return { at: s.scrollTop, room: s.scrollHeight - s.clientHeight };
+  });
+  check('dragging to the bottom of the track reaches the bottom of the text',
+    deep.at > deep.room * 0.9, `at ${deep.at} of ${deep.room}`);
+  eq('and the thumb says so',
+     await page.locator('#railthumb').getAttribute('aria-valuenow'), '100');
+
+  // a press on bare track is a jump, not a no-op
+  await page.mouse.move(x, rail.y + 4);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const back = await page.evaluate(() => document.getElementById('scroller').scrollTop);
+  check('pressing the top of the track goes back to the top', back < 20, `at ${back}`);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nA- and A+ resize the text and the choice outlives a reload');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(400);
+  const size = () => page.evaluate(() =>
+    parseFloat(getComputedStyle(document.getElementById('reader')).fontSize));
+
+  eq('starts at the default', await size(), 19);
+  check('the control is on screen without opening the sheet',
+    await page.locator('#sizeup').isVisible() &&
+    !(await page.evaluate(() => document.getElementById('sheet').classList.contains('open'))), '');
+
+  await page.click('#sizeup'); await page.waitForTimeout(150);
+  eq('A+ steps up', await size(), 21);
+  await page.click('#sizedown'); await page.click('#sizedown'); await page.waitForTimeout(150);
+  eq('A- steps back down past the default', await size(), 17);
+
+  eq('and is written down',
+     await page.evaluate(() => localStorage.getItem('meristem.size.v1')), '17');
+
+  await page.reload(); await page.waitForTimeout(600);
+  eq('a returning visit opens at that size', await size(), 17);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nthe size control stops at both ends rather than running off them');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(400);
+  const size = () => page.evaluate(() =>
+    parseFloat(getComputedStyle(document.getElementById('reader')).fontSize));
+
+  // press it until it stops being pressable — the button is the limit
+  for (let i = 0; i < 9 && !(await page.locator('#sizedown').isDisabled()); i++)
+    await page.click('#sizedown');
+  await page.waitForTimeout(150);
+  eq('the smallest step is the floor', await size(), 15);
+  check('and the button says so', await page.locator('#sizedown').isDisabled(), '');
+
+  for (let i = 0; i < 12 && !(await page.locator('#sizeup').isDisabled()); i++)
+    await page.click('#sizeup');
+  await page.waitForTimeout(150);
+  eq('the largest step is the ceiling', await size(), 31);
+  check('and that button says so too', await page.locator('#sizeup').isDisabled(), '');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nresizing keeps your place rather than throwing you somewhere new');
+{
+  const page = await newPage();
+  await page.setViewportSize({ width: 430, height: 720 });
+  await page.click('#sample'); await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const s = document.getElementById('scroller');
+    s.scrollTop = (s.scrollHeight - s.clientHeight) / 2;
+  });
+  await page.waitForTimeout(200);
+
+  await page.click('#sizeup'); await page.click('#sizeup');
+  await page.waitForTimeout(250);
+
+  const where = await page.evaluate(() => {
+    const s = document.getElementById('scroller');
+    return s.scrollTop / (s.scrollHeight - s.clientHeight);
+  });
+  check('still about halfway through', Math.abs(where - 0.5) < 0.06, `at ${where}`);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
 /* ---------- done ---------- */
 
 await browser.close();
