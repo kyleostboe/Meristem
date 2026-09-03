@@ -610,6 +610,7 @@
     font-family:"Newsreader",Georgia,serif;font-size:11.5px;line-height:1.6;color:var(--muted);
   }
   .fieldnote a{color:var(--mark)}
+  .fieldnote code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink)}
   .freerow{
     display:flex;align-items:center;gap:10px;margin:9px 0 0;
     font-family:"Newsreader",Georgia,serif;font-size:12px;color:var(--muted);
@@ -943,7 +944,7 @@
     <div class="keyblock">
       <label class="fieldlab" for="baseurl">Base URL</label>
       <input class="field" id="baseurl" type="text" placeholder="https://openrouter.ai/api/v1" autocomplete="off" spellcheck="false">
-      <p class="fieldnote">Any OpenAI-compatible endpoint — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a> (free tier, no card), OpenCode Zen, Groq, Together, a local Ollama or LM Studio server, or anywhere else that speaks `/chat/completions`. It has to allow requests from a browser (CORS); not every API does, and this page has no server of its own to route around that.</p>
+      <p class="fieldnote">Everything in front of <code>/chat/completions</code>, which is added for you — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a> (free tier, no card) is the default, OpenCode Zen is <code>https://opencode.ai/zen/v1</code>, and Groq, Together, DeepSeek, a local Ollama or LM Studio server all work the same way. It has to allow requests from a browser (CORS); not every API does, and this page has no server of its own to route around that.</p>
     </div>
 
     <div class="keyblock">
@@ -3534,24 +3535,56 @@
 
   /* ---- picking models ----
      Which models are free moves week to week, so the list is fetched rather
-     than baked in. It needs no key. When the fetch fails you are left typing
-     the id yourself, which is what the box does anyway — a provider with no
-     public /models, or one this page can't reach at all, still works, it just
-     starts with an empty list.
+     than baked in. When the fetch fails you are left typing the id yourself,
+     which is what the box does anyway — a provider with no public /models, or
+     one this page can't reach at all, still works, it just starts with an
+     empty list.
 
      Cached per base URL: switching providers in the dialog has to reach the
      new one rather than keep showing the old catalogue. `orCatalog` (and
      `orCatalogFor`, which base it belongs to) is the one the dialog is
      currently drawing, and it moves to point at whichever base a call last
      resolved for — cached or freshly fetched makes no difference to that. */
-  var orCatalogs={}, orCatalogWaits={}, orCatalog=null, orCatalogFor=null, catalogSeq=0;
+  var orCatalogs={}, orCatalogWaits={}, orCatalogWhy={};
+  var orCatalog=null, orCatalogFor=null, catalogSeq=0;
 
-  function fetchOne(base){
-    if(orCatalogs[base]) return Promise.resolve(orCatalogs[base]);
-    if(orCatalogWaits[base]) return orCatalogWaits[base];
-    orCatalogWaits[base]=fetch(modelsUrl(base)).then(function(r){
-      if(!r.ok) throw new Error(String(r.status));
-      return r.json();
+  /* Cached against the base *and* the key. A list that came back empty because
+     nothing was authenticating it has to be asked again the moment a key is
+     typed, and on most providers it is the key, not just the host, that
+     decides what the catalogue contains. */
+  function catalogSlot(base,key){ return apiBase(base)+"\n"+(key||""); }
+
+  function askModels(base,key){
+    return fetch(modelsUrl(base),key?{headers:{Authorization:"Bearer "+key}}:undefined)
+      .then(function(r){
+        if(r.ok) return r.json();
+        var e=new Error("http "+r.status); e.status=r.status; throw e;
+      });
+  }
+
+  /* Why the list is empty is worth saying out loud. A key the provider refused
+     and a provider that simply publishes no catalogue look identical from
+     here, and only one of them also means the key won't work for asking. */
+  function whyNoList(base,err){
+    var host=hostOf(base), s=err&&err.status;
+    if(s===401||s===403) return host+" didn't accept that key for its model list.";
+    if(s) return host+" answered "+s+" asking for its model list.";
+    return "Couldn't reach "+host+" — it may publish no model list, or may not allow browser requests.";
+  }
+
+  function fetchOne(base,key){
+    var slot=catalogSlot(base,key);
+    if(orCatalogs[slot]) return Promise.resolve(orCatalogs[slot]);
+    if(orCatalogWaits[slot]) return orCatalogWaits[slot];
+    /* Unauthenticated first. That is the call OpenRouter answers, and with no
+       Authorization header on it there is nothing for the browser to preflight,
+       so the provider already known to work here keeps working exactly as it
+       did. Nearly everyone else wants the key on this call as well — OpenAI
+       and the gateways shaped after it all do — so a refusal earns one more
+       try carrying it, rather than an empty list and a shrug. */
+    orCatalogWaits[slot]=askModels(base,"").catch(function(err){
+      if(!key) throw err;
+      return askModels(base,key);
     }).then(function(d){
       /* OpenRouter's /models says what's free; a plain OpenAI-shaped one often
          carries no `pricing` at all. Silence there is not "free" — it is
@@ -3574,19 +3607,21 @@
         if(a.free!==b.free) return a.free?-1:1;
         return a.id<b.id?-1:a.id>b.id?1:0;
       });
-      orCatalogs[base]=list;
-      delete orCatalogWaits[base];
+      orCatalogs[slot]=list;
+      orCatalogWhy[slot]="";
+      delete orCatalogWaits[slot];
       return list;
-    },function(){
+    },function(err){
       /* Settle on an empty catalogue rather than staying unfetched: the list
          then says so and the box below it still takes an id. Not every
          OpenAI-compatible server publishes one of these, and this page can't
          tell a missing endpoint apart from a CORS refusal. */
-      orCatalogs[base]=[];
-      delete orCatalogWaits[base];
-      return orCatalogs[base];
+      orCatalogs[slot]=[];
+      orCatalogWhy[slot]=whyNoList(base,err);
+      delete orCatalogWaits[slot];
+      return orCatalogs[slot];
     });
-    return orCatalogWaits[base];
+    return orCatalogWaits[slot];
   }
 
   /* Whichever call this is, it stamps the counter now, before the network is
@@ -3595,11 +3630,12 @@
      with no guarantee they land back in that order — so a resolution only
      gets to move `orCatalog` if the counter still reads what it did when this
      particular call went out. */
-  function fetchCatalog(base){
+  function fetchCatalog(base,key){
     base=apiBase(base);
+    var slot=catalogSlot(base,key);
     var seq=++catalogSeq;
-    return fetchOne(base).then(function(list){
-      if(seq===catalogSeq){ orCatalogFor=base; orCatalog=list; }
+    return fetchOne(base,key).then(function(list){
+      if(seq===catalogSeq){ orCatalogFor=slot; orCatalog=list; }
       return list;
     });
   }
@@ -3682,7 +3718,8 @@
     say.className="mrow"; say.style.cursor="default";
     say.textContent=orCatalog.length
       ? "Nothing matches. Any model id typed above works as it stands."
-      : "Couldn't fetch the list. Type a model id above and it is used as it stands.";
+      : (orCatalogWhy[orCatalogFor]||"Couldn't fetch the list.")+
+        " Type a model id above and it is used as it stands.";
     box.appendChild(say);
   }
 
@@ -3698,16 +3735,19 @@
     return b;
   }
 
-  /* The draft base URL live in the field, not just in `draftBase`, so typing
-     is what drives a refetch — `draftBase` only exists to remember it between
-     keystrokes and the eventual Save. */
+  /* The draft base URL and key live in the fields, not just in `draftBase`, so
+     typing either is what drives a refetch — `draftBase` only exists to
+     remember the URL between keystrokes and the eventual Save. The key is in
+     it because most providers won't hand over a catalogue without one, which
+     makes pasting a key the moment the list can finally be fetched. */
   function fetchDraftCatalog(){
-    var base=apiBase($("baseurl").value);
+    var base=apiBase($("baseurl").value), key=($("keytxt").value||"").trim();
+    var slot=catalogSlot(base,key);
     draftBase=base;
     orCatalog=null;
     drawModelList();
-    fetchCatalog(base).then(function(){
-      if(orCatalogFor===base&&$("keyin").classList.contains("on")) drawModelList();
+    fetchCatalog(base,key).then(function(){
+      if(orCatalogFor===slot&&$("keyin").classList.contains("on")) drawModelList();
     });
   }
 
@@ -3719,9 +3759,7 @@
     $("modelq").value="";
     drawChips(); drawModelList();
     openOverlay($("keyin"),apiKey?$("modelq"):$("keytxt"));
-    fetchCatalog(baseUrl).then(function(){
-      if(orCatalogFor===apiBase(baseUrl)&&$("keyin").classList.contains("on")) drawModelList();
-    });
+    fetchDraftCatalog();
   }
 
   $("keybar").addEventListener("click",function(e){ e.stopPropagation(); openKey(); });
@@ -3732,12 +3770,15 @@
     if(e.target===$("keyin")) closeOverlay($("keyin"));
   });
   var baseTimer=null;
-  $("baseurl").addEventListener("input",function(){
+  function refetchSoon(){
     /* A refetch on every keystroke would fire one request per character —
-       wait for a pause, the way search boxes do. */
+       wait for a pause, the way search boxes do. One timer covers both fields
+       because either one changing invalidates the same list. */
     clearTimeout(baseTimer);
     baseTimer=setTimeout(fetchDraftCatalog,500);
-  });
+  }
+  $("baseurl").addEventListener("input",refetchSoon);
+  $("keytxt").addEventListener("input",refetchSoon);
   $("modelq").addEventListener("input",drawModelList);
   $("freeonly").addEventListener("change",drawModelList);
   $("modelq").addEventListener("keydown",function(e){

@@ -175,6 +175,11 @@ is no per-provider code and nothing to keep a list of: `Connect a model` takes
 a **base URL** alongside the key — OpenRouter's is filled in by default — paste
 a different one and everything downstream, model list included, follows it.
 
+The base URL is everything in front of `/chat/completions`, which Meristem
+adds itself. OpenCode Zen is `https://opencode.ai/zen/v1`, OpenRouter
+`https://openrouter.ai/api/v1`, a local Ollama `http://localhost:11434/v1`.
+Leaving the field empty means OpenRouter.
+
 One thing this can't route around: **CORS**. A static page with no server of
 its own can only reach an API that itself allows a browser to call it from an
 arbitrary origin. OpenRouter does. Not everything does, and `fetch()` cannot
@@ -187,6 +192,14 @@ The model list is fetched from that base URL's `/models` rather than baked in
 and any id you paste in works whether or not the list knows about it yet.
 Plenty of providers say nothing about pricing at all; there the free filter
 disables itself rather than quietly hiding everything.
+
+OpenRouter publishes its catalogue to anyone; almost everyone else wants the
+key on that call too, so the list is asked for bare and then, if that is
+refused, again carrying the key — which is why the list arrives when you type
+the key rather than when you type the URL. When it doesn't arrive the box says
+which of the two happened: a refused key reads differently from a provider
+that publishes no catalogue at all, and only one of those also means `↑` won't
+work. Either way, typing a model id in the box uses it as it stands.
 
 Pick more than one and `↑` sends to all of them at once. Their answers cannot
 all become pages off the same note, so they arrive side by side under it — the

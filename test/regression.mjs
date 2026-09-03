@@ -94,6 +94,9 @@ const FAKE_SPEECH = () => {
  * headers, body — and `__catalogs` lets a test register a `/models` response
  * per base URL; a base with none registered gets a 404, the way a provider
  * with no discovery endpoint does, rather than reaching the real internet.
+ * `__keyed` marks bases whose `/models` refuses an unauthenticated call with a
+ * 401 — which is nearly every provider except OpenRouter — and
+ * `__modelsAsked` records each catalogue request and the header it carried.
  * Anything that isn't shaped like either path falls through to the real
  * fetch, so a page that never connects a model behaves exactly as it did
  * before. */
@@ -108,6 +111,8 @@ const FAKE_PROVIDER = () => {
   window.__replies = {};
   window.__slow = {};
   window.__fail = null;
+  window.__modelsAsked = [];
+  window.__keyed = {};
   window.__catalogs = {
     'https://openrouter.ai/api/v1': [
       { id: 'stub/free-one:free', name: 'Free One', context_length: 128000,
@@ -125,10 +130,13 @@ const FAKE_PROVIDER = () => {
     const u = String(url && url.url ? url.url : url);
     if (/\/models(?:\?.*)?$/.test(u)) {
       const base = u.replace(/\/models(?:\?.*)?$/, '');
+      const auth = (init && init.headers && init.headers.Authorization) || '';
+      window.__modelsAsked.push({ base, auth });
       const list = window.__catalogs[base];
-      return Promise.resolve(list === undefined
-        ? json({ error: { message: 'not found' } }, 404)
-        : json({ data: list }));
+      if (list === undefined) return Promise.resolve(json({ error: { message: 'not found' } }, 404));
+      if (window.__keyed[base] && !auth)
+        return Promise.resolve(json({ error: { message: 'no key' } }, 401));
+      return Promise.resolve(json({ data: list }));
     }
     if (!/\/chat\/completions$/.test(u)) return real(url, init);
 
@@ -1629,14 +1637,57 @@ console.log('\na provider with no /models still takes a typed id');
   await bar(page, 'keybar'); await page.waitForTimeout(400);
   await page.fill('#baseurl', base); await page.waitForTimeout(700);
 
-  check('it says so rather than hanging',
-    (await page.locator('#mlist').textContent()).includes("Couldn't fetch"), '');
+  check('it says what happened rather than hanging',
+    (await page.locator('#mlist').textContent()).includes('answered 404'), '');
   await page.fill('#keytxt', 'sk-K');
   await page.fill('#modelq', 'house-model');
   await page.click('#keysave'); await page.waitForTimeout(300);
   eq('the typed id is what gets saved',
      await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1')).models),
      ['house-model']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na model list that needs the key gets it');
+{
+  const page = await newPage();
+  const base = 'https://opencode.example/zen/v1';
+  await page.evaluate(b => {
+    window.__catalogs[b] = [{ id: 'grok-code' }, { id: 'qwen3-coder' }];
+    window.__keyed[b] = true;   // 401 to an unauthenticated /models, like most providers
+  }, base);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(400);
+
+  await page.fill('#baseurl', base); await page.waitForTimeout(700);
+  check('with no key the list is empty and says the key is why',
+    (await page.locator('#mlist').textContent()).includes("didn't accept that key"), '');
+
+  await page.fill('#keytxt', 'sk-zen-TESTKEY'); await page.waitForTimeout(700);
+  eq('typing the key is what fetches the list',
+     await page.$$eval('#mlist .id', ns => ns.map(n => n.textContent)),
+     ['grok-code', 'qwen3-coder']);
+
+  const tries = (await page.evaluate(() => window.__modelsAsked)).filter(a => a.base === base);
+  eq('it tried without the key before spending one', tries[0].auth, '');
+  eq('and then carried it', tries[tries.length - 1].auth, 'Bearer sk-zen-TESTKEY');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log("\nOpenRouter's public list is still fetched with no key attached");
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(500);
+
+  eq('the models are there', (await page.$$eval('#mlist .id', ns => ns.length)) > 0, true);
+  const tries = await page.evaluate(() => window.__modelsAsked);
+  eq('asked once', tries.length, 1);
+  /* No Authorization header means no CORS preflight, which is the whole reason
+   * the unauthenticated call goes first rather than second. */
+  eq('and asked bare', tries[0].auth, '');
   eq('nothing threw', page.errors, []);
   await page.close_();
 }
