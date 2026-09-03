@@ -149,6 +149,20 @@ It is a standing preference, not a per-thread setting — pick `off` once and it
 stays off. A `+ Always` standing instruction rides along as the system prompt
 regardless of which one is chosen.
 
+### Reading a long one
+
+The right edge carries a **scroll rail** whenever the text is taller than the
+screen — press anywhere on it to jump there and keep dragging, which is the
+gesture a native scrollbar wants to be and is three pixels too thin to give
+you. It is focusable, so arrow keys, `PageUp`/`PageDown` and `Home`/`End`
+drive it too.
+
+**`A−` / `A+`**, beside the note count, set the reading size across seven
+steps. It is a standing preference like `Context` — set it once and every text
+opens that way. Resizing holds your place proportionally rather than by pixel
+offset, so a jump from the smallest step to the largest leaves you where you
+were reading rather than somewhere you have not reached.
+
 ### Small things that matter
 
 - **Hold `↑`** to speak instead of typing. The transcript lands in the box so
