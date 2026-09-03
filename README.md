@@ -10,9 +10,10 @@ on the message you are reading. Meristem puts the interaction on the read
 surface: you mark up the text itself, and the conversation branches out of your
 marks.
 
-Give it an [OpenRouter](https://openrouter.ai/keys) key and it is also an
-ordinary chat client — a message box, streamed answers, the lot. The difference
-is what you can do with an answer once it arrives.
+Give it a key — [OpenRouter](https://openrouter.ai/keys)'s free tier, OpenCode
+Zen, or any other OpenAI-compatible API — and it is also an ordinary chat
+client — a message box, streamed answers, the lot. The difference is what you
+can do with an answer once it arrives.
 
 ## How it works
 
@@ -134,8 +135,19 @@ thing with the conversation written into it, because a prompt travelling alone
 has to carry its own context. Edit it by hand and it is sent exactly as
 written: if you wrote it, it isn't the app's to repackage.
 
-`Context: path / page / all` decides how much of the thread goes either way, and
-a `+ Always` standing instruction rides along as the system prompt.
+**`Context`** is the memory switch, cycling three ways:
+
+- **conversation** (default) — the chain down to this page goes as real turns,
+  the same way any chat client remembers what you said. This already is "the
+  API's own memory"; nothing more needs turning on for it.
+- **off** — no memory. Each message goes alone, with nothing said before it —
+  the same one-shot statelessness as calling the API cold every time.
+- **everything** — conversation, plus every other branch in the thread, for
+  the rare round that needs the whole tree in view.
+
+It is a standing preference, not a per-thread setting — pick `off` once and it
+stays off. A `+ Always` standing instruction rides along as the system prompt
+regardless of which one is chosen.
 
 ### Small things that matter
 
@@ -152,15 +164,29 @@ a `+ Always` standing instruction rides along as the system prompt.
 
 Carrying the prompt to another window and the reply back is four gestures a
 round, and by the fourth round it is most of what using the app feels like.
-Give Meristem an [OpenRouter](https://openrouter.ai/keys) key — the free tier
-needs no card — and `Ask` does the round trip itself: the same prompt goes out,
-and the answers come back beside the same notes.
+Give Meristem a key and `↑` does the round trip itself: the same prompt goes
+out, and the answers come back beside the same notes.
 
-`Connect a model` (in the sheet, or on the blank screen) takes the key and a
-shortlist. The model list is fetched from OpenRouter rather than baked in,
-because which models are free moves week to week; it filters to the free ones
-by default, and any id you paste in works whether or not the list knows about
-it yet.
+It works with any key that speaks OpenAI's chat completions shape at
+`<base>/chat/completions`, which by now is nearly everything —
+[OpenRouter](https://openrouter.ai/keys) (free tier, no card), OpenCode Zen,
+Groq, Together, Fireworks, DeepSeek, a local Ollama or LM Studio server. There
+is no per-provider code and nothing to keep a list of: `Connect a model` takes
+a **base URL** alongside the key — OpenRouter's is filled in by default — paste
+a different one and everything downstream, model list included, follows it.
+
+One thing this can't route around: **CORS**. A static page with no server of
+its own can only reach an API that itself allows a browser to call it from an
+arbitrary origin. OpenRouter does. Not everything does, and `fetch()` cannot
+tell a CORS refusal apart from the network simply being down, so a refusal
+here reads as "couldn't reach it" either way — worth knowing before assuming
+the key itself is wrong.
+
+The model list is fetched from that base URL's `/models` rather than baked in
+— it filters to the free ones by default where the response says what's free,
+and any id you paste in works whether or not the list knows about it yet.
+Plenty of providers say nothing about pricing at all; there the free filter
+disables itself rather than quietly hiding everything.
 
 Pick more than one and `↑` sends to all of them at once. Their answers cannot
 all become pages off the same note, so they arrive side by side under it — the
@@ -173,12 +199,12 @@ a replacement. Nothing is sent anywhere until you press one of the two.
 
 **About the key.** It is held in this browser's `localStorage`, under its own
 key, and is never written into a thread file or a Markdown export — you can
-share a thread without sharing the key. It travels only to OpenRouter. There is
-no server here to keep it on and no way to encrypt it that a page in the same
-origin could not undo, so treat it as a key you are willing to revoke, and use
-a free or limited one. `Forget key` removes it. Because the browser needs an
-origin to present, `↑` needs the page served over http(s); opened from
-`file://` it says so, and `⧉` still works.
+share a thread without sharing the key. It travels only to the base URL you
+gave it. There is no server here to keep it on and no way to encrypt it that a
+page in the same origin could not undo, so treat it as a key you are willing to
+revoke, and use a free or limited one. `Forget key` removes it, base URL
+included. Because the browser needs an origin to present, `↑` needs the page
+served over http(s); opened from `file://` it says so, and `⧉` still works.
 
 ## Sharing text into it
 
@@ -232,4 +258,4 @@ your keyboard's own dictation key still works in that box.
 There is no server and no account. Threads are autosaved to `localStorage`, and
 moving one between devices means exporting it. Your text leaves the browser only
 when you send it somewhere: onto the clipboard when you press `⧉`, or to
-OpenRouter when you press `↑`.
+whichever API you connected when you press `↑`.

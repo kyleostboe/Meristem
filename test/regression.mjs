@@ -85,39 +85,61 @@ const FAKE_SPEECH = () => {
   window.SpeechRecognition = FakeSR;
 };
 
-/* An OpenRouter we control. The app talks to two endpoints with one shape
- * each, so the stub is small: `__replies` is what a given model answers,
- * `__slow` how long it takes about it, `__fail` an HTTP status to refuse with,
- * and `__asked` records what actually went over the wire. Anything that isn't
- * OpenRouter falls through to the real fetch, so a page that never connects a
- * model behaves exactly as it did before. */
-const FAKE_OPENROUTER = () => {
+/* A model API we control, shaped generically: the app now talks OpenAI-
+ * compatible chat completions to whatever base URL it's given, not just
+ * OpenRouter's, so the stub matches on the URL shape (`/chat/completions`,
+ * `/models`) rather than a hardcoded host. `__replies` is what a given model
+ * answers, `__slow` how long it takes about it, `__fail` an HTTP status to
+ * refuse with, `__asked` records what actually went over the wire — url,
+ * headers, body — and `__catalogs` lets a test register a `/models` response
+ * per base URL; a base with none registered gets a 404, the way a provider
+ * with no discovery endpoint does, rather than reaching the real internet.
+ * Anything that isn't shaped like either path falls through to the real
+ * fetch, so a page that never connects a model behaves exactly as it did
+ * before. */
+/* This exact string is duplicated below, deliberately: `addInitScript`
+ * stringifies the function body and runs it as a fresh script in the
+ * browser, with no access to anything from this module's closure — a
+ * reference to a Node-side const here would be `ReferenceError` in the page,
+ * not a shared value. */
+const OR_BASE = 'https://openrouter.ai/api/v1';
+const FAKE_PROVIDER = () => {
   window.__asked = [];
   window.__replies = {};
   window.__slow = {};
   window.__fail = null;
-  const CATALOGUE = [
-    { id: 'stub/free-one:free', name: 'Free One', context_length: 128000,
-      pricing: { prompt: '0', completion: '0' } },
-    { id: 'stub/free-two:free', name: 'Free Two', context_length: 32000,
-      pricing: { prompt: '0', completion: '0' } },
-    { id: 'stub/paid-one', name: 'Paid One', context_length: 200000,
-      pricing: { prompt: '0.000003', completion: '0.000015' } },
-  ];
+  window.__catalogs = {
+    'https://openrouter.ai/api/v1': [
+      { id: 'stub/free-one:free', name: 'Free One', context_length: 128000,
+        pricing: { prompt: '0', completion: '0' } },
+      { id: 'stub/free-two:free', name: 'Free Two', context_length: 32000,
+        pricing: { prompt: '0', completion: '0' } },
+      { id: 'stub/paid-one', name: 'Paid One', context_length: 200000,
+        pricing: { prompt: '0.000003', completion: '0.000015' } },
+    ],
+  };
   const json = (body, status = 200) => new Response(JSON.stringify(body),
     { status, headers: { 'Content-Type': 'application/json' } });
   const real = window.fetch.bind(window);
   window.fetch = (url, init) => {
     const u = String(url && url.url ? url.url : url);
-    if (u.includes('openrouter.ai/api/v1/models')) return Promise.resolve(json({ data: CATALOGUE }));
-    if (!u.includes('openrouter.ai/api/v1/chat/completions')) return real(url, init);
+    if (/\/models(?:\?.*)?$/.test(u)) {
+      const base = u.replace(/\/models(?:\?.*)?$/, '');
+      const list = window.__catalogs[base];
+      return Promise.resolve(list === undefined
+        ? json({ error: { message: 'not found' } }, 404)
+        : json({ data: list }));
+    }
+    if (!/\/chat\/completions$/.test(u)) return real(url, init);
 
     const body = JSON.parse(init.body);
     window.__asked.push({
+      url: u,
       model: body.model,
       prompt: body.messages[body.messages.length - 1].content,
       messages: body.messages,
       stream: !!body.stream,
+      headers: Object.assign({}, init.headers),
       auth: init.headers.Authorization,
     });
     if (window.__fail) return Promise.resolve(json({ error: { message: 'refused' } }, window.__fail));
@@ -167,7 +189,7 @@ async function newPage({ confirm = true } = {}) {
   await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
-  await ctx.addInitScript(FAKE_OPENROUTER);
+  await ctx.addInitScript(FAKE_PROVIDER);
   await ctx.addInitScript(`window.confirm = () => ${confirm};`);
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
@@ -211,9 +233,10 @@ async function speak(page, tokenIndex, text) {
 }
 /* Hand the app a key and a shortlist the way the settings card would, then
  * reload so it is picked up exactly as it is on a returning visit. */
-async function connect(page, models, key = 'sk-or-v1-TESTKEY') {
-  await page.evaluate(([m, k]) => localStorage.setItem(
-    'meristem.openrouter.v1', JSON.stringify({ key: k, models: m })), [models, key]);
+async function connect(page, models, key = 'sk-or-v1-TESTKEY', baseUrl) {
+  await page.evaluate(([m, k, b]) => localStorage.setItem(
+    'meristem.openrouter.v1', JSON.stringify({ key: k, models: m, baseUrl: b })),
+    [models, key, baseUrl]);
   await page.reload();
   await page.waitForTimeout(300);
 }
@@ -754,7 +777,7 @@ console.log('\nshared text opens in the reader');
   await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
-  await ctx.addInitScript(FAKE_OPENROUTER);
+  await ctx.addInitScript(FAKE_PROVIDER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
@@ -907,7 +930,7 @@ console.log('\nasking a model which passages are worth interrogating');
   await ctx.route('https://fonts.googleapis.com/**', r => r.abort());
   await ctx.route('https://fonts.gstatic.com/**', r => r.abort());
   await ctx.addInitScript(FAKE_SPEECH);
-  await ctx.addInitScript(FAKE_OPENROUTER);
+  await ctx.addInitScript(FAKE_PROVIDER);
   await ctx.addInitScript(`window.confirm = () => true;`);
   const page = await ctx.newPage();
   page.setDefaultTimeout(8000);   // nothing here takes seconds; a stall is a bug
@@ -1171,9 +1194,9 @@ console.log('\nchoosing models from the catalogue');
   eq('the bar now names the model',
      await page.locator('#keybar').textContent(), 'free-one');
   check('and the send arrow is there', await page.locator('#saysend').isVisible(), '');
-  eq('the key and model are remembered',
+  eq('the key, base URL and model are remembered',
      await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1'))),
-     { key: 'sk-or-v1-TYPED', models: ['stub/free-one:free'] });
+     { key: 'sk-or-v1-TYPED', baseUrl: 'https://openrouter.ai/api/v1', models: ['stub/free-one:free'] });
 
   await bar(page, 'keybar'); await page.waitForTimeout(300);
   await page.click('#keyforget'); await page.waitForTimeout(300);
@@ -1497,6 +1520,161 @@ console.log('\na question carried out by hand is still pending when you come bac
   eq('and the answer lands under it',
      (await state(page)).nodes.find(n => n.text === 'The interface, not the model.') !== undefined,
      true);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+
+console.log('\na custom base URL is where the round actually goes');
+{
+  const page = await newPage();
+  const base = 'https://api.example.com/v1';
+  await connect(page, ['grand-model'], 'sk-example-KEY', base);
+  await page.evaluate(() => { window.__replies['grand-model'] = 'From the custom host.'; });
+
+  await say(page, 'where does this go?');
+  const asked = (await page.evaluate(() => window.__asked))[0];
+  check('the request went to the custom host',
+    asked.url.startsWith(base + '/chat/completions'), asked.url);
+  eq('with the saved key as a bearer token', asked.auth, 'Bearer sk-example-KEY');
+  check('and the answer landed',
+    (await state(page)).nodes.some(n => n.text === 'From the custom host.'), '');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nOpenRouter-only headers stay off anyone else\'s request');
+{
+  const page = await newPage();
+  const base = 'https://api.example.com/v1';
+  await connect(page, ['m'], 'sk-K', base);
+  await page.evaluate(() => { window.__replies['m'] = 'ok'; });
+  await say(page, 'hello');
+
+  const headers = (await page.evaluate(() => window.__asked))[0].headers;
+  check('no HTTP-Referer', !('HTTP-Referer' in headers), JSON.stringify(headers));
+  check('no X-Title', !('X-Title' in headers), JSON.stringify(headers));
+
+  // and OpenRouter itself still gets them
+  const page2 = await newPage();
+  await connect(page2, ['stub/free-one:free']);
+  await page2.evaluate(() => { window.__replies['stub/free-one:free'] = 'ok'; });
+  await say(page2, 'hello');
+  const orHeaders = (await page2.evaluate(() => window.__asked))[0].headers;
+  check('OpenRouter gets its headers', 'HTTP-Referer' in orHeaders && 'X-Title' in orHeaders,
+    JSON.stringify(orHeaders));
+  eq('nothing threw', page.errors.concat(page2.errors), []);
+  await page.close_(); await page2.close_();
+}
+
+console.log('\na saved key with no base URL still means OpenRouter');
+{
+  const page = await newPage();
+  // the exact shape every key saved before this feature existed has —
+  // `connect()` with no fourth argument stores no `baseUrl` at all.
+  await connect(page, ['stub/free-one:free'], 'sk-or-v1-OLD');
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'still works'; });
+  await say(page, 'hi');
+
+  const asked = (await page.evaluate(() => window.__asked))[0];
+  check('it still goes to OpenRouter', asked.url.startsWith(OR_BASE), asked.url);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na model id with no slash is a model id');
+{
+  const page = await newPage();
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(400);
+  await page.fill('#keytxt', 'sk-K');
+  await page.fill('#baseurl', 'https://api.example.com/v1'); await page.waitForTimeout(700);
+  await page.fill('#modelq', 'gpt-4o-mini');
+  await page.keyboard.press('Enter'); await page.waitForTimeout(200);
+  check('it lands as a chip', await page.locator('.chip').first().textContent(), 'gpt-4o-mini');
+  await page.click('#keysave'); await page.waitForTimeout(300);
+  eq('and is what gets asked',
+     await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1')).models),
+     ['gpt-4o-mini']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na provider that says nothing about price does not get filtered as if it did');
+{
+  const page = await newPage();
+  const base = 'https://api.example.com/v1';
+  await page.evaluate(b => {
+    // no `pricing` field at all — the common shape for a plain OpenAI-style /models
+    window.__catalogs[b] = [{ id: 'model-a' }, { id: 'model-b' }];
+  }, base);
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(400);
+  await page.fill('#baseurl', base); await page.waitForTimeout(700);
+
+  eq('both models are offered despite "Free ones only" defaulting on',
+     await page.$$eval('#mlist .id', ns => ns.map(n => n.textContent)),
+     ['model-a', 'model-b']);
+  check('the checkbox is disabled — there is nothing here to filter by',
+    await page.locator('#freeonly').isDisabled(), '');
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\na provider with no /models still takes a typed id');
+{
+  const page = await newPage();
+  const base = 'https://api.example.com/v1';   // deliberately never registered in __catalogs
+  await page.click('#sample'); await page.waitForTimeout(300);
+  await bar(page, 'keybar'); await page.waitForTimeout(400);
+  await page.fill('#baseurl', base); await page.waitForTimeout(700);
+
+  check('it says so rather than hanging',
+    (await page.locator('#mlist').textContent()).includes("Couldn't fetch"), '');
+  await page.fill('#keytxt', 'sk-K');
+  await page.fill('#modelq', 'house-model');
+  await page.click('#keysave'); await page.waitForTimeout(300);
+  eq('the typed id is what gets saved',
+     await page.evaluate(() => JSON.parse(localStorage.getItem('meristem.openrouter.v1')).models),
+     ['house-model']);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nContext: off sends no memory at all');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'First.'; });
+  await say(page, 'first question');
+
+  await bar(page, 'ctxbar'); await page.waitForTimeout(300);
+  eq('one tap from the default reaches "off"',
+     await page.locator('#ctxbar').textContent(), 'Context: off');
+
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'Second.'; });
+  await say(page, 'second question');
+
+  const sent = (await page.evaluate(() => window.__asked))[1].messages;
+  eq('nothing before it rides along', sent, [{ role: 'user', content: 'second question' }]);
+  eq('nothing threw', page.errors, []);
+  await page.close_();
+}
+
+console.log('\nthe context choice is a standing preference, not per-thread');
+{
+  const page = await newPage();
+  await connect(page, ['stub/free-one:free']);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'ok'; });
+  await say(page, 'a question');
+  await bar(page, 'ctxbar'); await page.waitForTimeout(300);
+  eq('switched to off', await page.locator('#ctxbar').textContent(), 'Context: off');
+
+  await page.reload(); await page.waitForTimeout(700);
+  await page.evaluate(() => { window.__replies['stub/free-one:free'] = 'ok again'; });
+  await say(page, 'a fresh start');
+  await openSheet(page); await page.waitForTimeout(300);
+  eq('it is still off after a reload', await page.locator('#ctxbar').textContent(), 'Context: off');
   eq('nothing threw', page.errors, []);
   await page.close_();
 }

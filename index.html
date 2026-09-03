@@ -616,6 +616,10 @@
   }
   .freerow label{display:flex;align-items:center;gap:6px;cursor:pointer}
   .freerow .mcount{margin-left:auto}
+  /* This provider's /models says nothing about price, so the checkbox has
+     nothing to filter by — dimmed rather than hidden, so it is clear why. */
+  .freerow.moot{opacity:.45}
+  .freerow.moot label{cursor:default}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
   .chips:empty{margin:0}
   .chip{
@@ -889,7 +893,7 @@
       <button class="mini" id="alwaysnote" title="An instruction to follow throughout">&#43; Always</button>
       <button class="mini" id="scopebar">All pages</button>
       <button class="mini" id="comparebar">Compare</button>
-      <button class="mini" id="ctxbar">Context: path</button>
+      <button class="mini" id="ctxbar">Context: conversation</button>
       <button class="mini off" id="keybar">Connect a model</button>
       <button class="mini" id="suggestbar" title="Ask a model which passages are worth interrogating">Suggest</button>
       <button class="mini" id="peekbar">Prompt</button>
@@ -934,18 +938,24 @@
 
 <div class="typein" id="keyin" role="dialog" aria-modal="true" aria-labelledby="keyq">
   <div class="card">
-    <p class="q" id="keyq">Give Meristem an OpenRouter key and it can ask the model itself — same prompt, same answers back beside the same notes, without the trip to another window.</p>
+    <p class="q" id="keyq">Give Meristem an API key and it can ask the model itself — same prompt, same answers back beside the same notes, without the trip to another window.</p>
+
+    <div class="keyblock">
+      <label class="fieldlab" for="baseurl">Base URL</label>
+      <input class="field" id="baseurl" type="text" placeholder="https://openrouter.ai/api/v1" autocomplete="off" spellcheck="false">
+      <p class="fieldnote">Any OpenAI-compatible endpoint — <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a> (free tier, no card), OpenCode Zen, Groq, Together, a local Ollama or LM Studio server, or anywhere else that speaks `/chat/completions`. It has to allow requests from a browser (CORS); not every API does, and this page has no server of its own to route around that.</p>
+    </div>
 
     <div class="keyblock">
       <label class="fieldlab" for="keytxt">API key</label>
-      <input class="field" id="keytxt" type="password" placeholder="sk-or-v1&#8230;" autocomplete="off" spellcheck="false">
-      <p class="fieldnote">Get a free one at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>. It stays in this browser, goes nowhere but OpenRouter, and is never written into a thread file or an export.</p>
+      <input class="field" id="keytxt" type="password" placeholder="paste it here&#8230;" autocomplete="off" spellcheck="false">
+      <p class="fieldnote">Stays in this browser, goes nowhere but the base URL above, and is never written into a thread file or an export.</p>
     </div>
 
     <div class="keyblock">
       <label class="fieldlab" for="modelq">Model</label>
       <input class="field" id="modelq" type="text" placeholder="Search, or paste a model id&#8230;" autocomplete="off" spellcheck="false">
-      <p class="freerow">
+      <p class="freerow" id="freerow">
         <label><input type="checkbox" id="freeonly" checked> Free ones only</label>
         <span class="mcount" id="mcount"></span>
       </p>
@@ -1450,7 +1460,14 @@
   /* ---------------- hold / tap gesture ---------------- */
   var overlayAt=0;
   var promptDirty=false;
+  /* "path" is real conversation memory — the chain down to this page, sent as
+     the model's own turns, same as any chat client does it. "page" is the way
+     to turn that off: each message goes alone, nothing before it. "all" adds
+     every other branch in the thread on top of "path", for the rare round
+     that needs to see the whole tree. The label shown is friendlier than the
+     value stored — "page" reads as scope, not as a memory switch. */
   var CTX=["path","page","all"], ctxMode="path";
+  var CTX_LABEL={path:"conversation",page:"off",all:"everything"};
   var timer=null, engaged=false, startPt=null, anchorA=-1, anchorB=-1, tapIdx=-1;
   var kbA=-1, kbB=-1;   // keyboard cursor / selection over the same words
 
@@ -2739,24 +2756,52 @@
      model behind any interface, needs no account here and no network from this
      page, and it stays exactly as it was. But it costs four gestures a round,
      and by the fourth round that is most of what using the thing feels like.
-     With an OpenRouter key the same prompt goes out over fetch and the reply
-     comes back through the same two parsers the paste box uses — `Ask` is
-     `Copy prompt`, taking it somewhere, and `Paste reply` collapsed into one
-     tap. Nothing here replaces the paste path; it stops being the only one.
+     With a key the same prompt goes out over fetch and the reply comes back
+     through the same two parsers the paste box uses — `Ask` is `Copy prompt`,
+     taking it somewhere, and `Paste reply` collapsed into one tap. Nothing
+     here replaces the paste path; it stops being the only one.
+
+     The wire format is the one nearly everything speaks: OpenAI's chat
+     completions shape, POSTed to `<base>/chat/completions` with a bearer
+     token. OpenRouter, Groq, Together, Fireworks, DeepSeek, a local Ollama or
+     LM Studio server, OpenCode Zen — pointing the base URL at any of them is
+     the whole of what "supporting" it means here. There is no per-provider
+     code to maintain and nothing to keep a list of; a key from somewhere new
+     works the moment its base URL does.
+
+     What this can't paper over is CORS: a static page with no server of its
+     own can only reach an API that itself allows a browser to call it from
+     an arbitrary origin. OpenRouter does. Not everything does, and a page
+     served with no server has no way to route around that — a refusal here
+     reads as "couldn't reach it" with no way to tell CORS apart from the
+     network just being down.
 
      The key lives under its own storage key, never inside a thread, so
      exporting or sending someone a thread cannot carry it out of the browser.
      It is held in localStorage in the clear, which is what a page with no
      server can do — anything running in this origin can read it, so it should
      be a key you are willing to revoke. */
-  var OR_CHAT="https://openrouter.ai/api/v1/chat/completions";
-  var OR_LIST="https://openrouter.ai/api/v1/models";
+  var DEFAULT_BASE="https://openrouter.ai/api/v1";
   var KEY_STORE="meristem.openrouter.v1";
   var MODEL_CAP=4;
 
-  var apiKey="", orModels=[], draftModels=[];
+  var apiKey="", baseUrl=DEFAULT_BASE, orModels=[], draftModels=[], draftBase=DEFAULT_BASE;
 
   function orConnected(){ return !!apiKey && orModels.length>0; }
+
+  /* Trimmed once here so every call site can just paste it onto a path. */
+  function apiBase(b){ return ((b||baseUrl||DEFAULT_BASE)+"").trim().replace(/\/+$/,"")||DEFAULT_BASE; }
+  function chatUrl(b){ return apiBase(b)+"/chat/completions"; }
+  function modelsUrl(b){ return apiBase(b)+"/models"; }
+
+  /* Two headers OpenRouter reads and nothing else does — worth sending there,
+     not worth risking a stricter CORS policy elsewhere rejecting a header it
+     doesn't recognise. */
+  function onOpenRouter(b){ return apiBase(b).indexOf("openrouter.ai")>=0; }
+
+  function hostOf(b){
+    try{ return new URL(apiBase(b)).hostname||"that API"; }catch(e){ return "that API"; }
+  }
 
   /* The tail of the id is what tells two models apart at a glance; the vendor
      prefix and the `:free` suffix are the same across most of a shortlist. */
@@ -2775,6 +2820,9 @@
     try{ d=JSON.parse(raw); }catch(e){ return; }
     if(!d||typeof d!=="object") return;
     apiKey=typeof d.key==="string"?d.key.trim():"";
+    /* Older saves never had a base URL — OpenRouter was the only one, so it
+       is still the right default when the field is missing. */
+    baseUrl=apiBase(typeof d.baseUrl==="string"&&d.baseUrl.trim()?d.baseUrl:DEFAULT_BASE);
     orModels=(Array.isArray(d.models)?d.models:[])
       .filter(function(m){ return typeof m==="string"&&m.trim(); })
       .map(function(m){ return m.trim(); })
@@ -2786,48 +2834,56 @@
     if(!store) return;
     try{
       if(!apiKey&&!orModels.length) store.removeItem(KEY_STORE);
-      else store.setItem(KEY_STORE,JSON.stringify({key:apiKey,models:orModels}));
+      else store.setItem(KEY_STORE,JSON.stringify({key:apiKey,baseUrl:baseUrl,models:orModels}));
     }catch(e){ toast("Couldn't remember that in this browser"); }
   }
 
   function orHeaders(){
-    return {
+    var h={
       "Content-Type":"application/json",
-      "Authorization":"Bearer "+apiKey,
-      "HTTP-Referer":/^https?:/.test(location.origin||"")?location.origin:"https://meristem.app",
-      "X-Title":"Meristem"
+      "Authorization":"Bearer "+apiKey
     };
+    if(onOpenRouter()){
+      h["HTTP-Referer"]=/^https?:/.test(location.origin||"")?location.origin:"https://meristem.app";
+      h["X-Title"]="Meristem";
+    }
+    return h;
   }
 
   /* Failures are turned into sentences here rather than at the call site,
      because what you need to hear differs by status and by nothing else: 401
-     is the key, 402 is credit, 429 is the free tier's ceiling, and anything
-     else is worth quoting back verbatim. */
+     is the key, 402 is credit, 429 is a rate ceiling, and anything else is
+     worth quoting back verbatim. */
   function orRefused(res,body){
     var data=null;
     try{ data=JSON.parse(body); }catch(e){}
     var said=data&&data.error&&(data.error.message||data.error.code);
-    if(res.status===401) return new Error("OpenRouter wouldn't take that key");
-    if(res.status===402) return new Error("That model needs credit on OpenRouter");
-    if(res.status===429) return new Error("Rate limited — free models cap how often you can ask");
-    return new Error(said?String(said).slice(0,180):"OpenRouter answered "+res.status);
+    var who=hostOf();
+    if(res.status===401) return new Error(who+" wouldn't take that key");
+    if(res.status===402) return new Error("That model needs credit at "+who);
+    if(res.status===429) return new Error("Rate limited by "+who+" — try again shortly");
+    if(res.status===404) return new Error(who+" has no /chat/completions there — check the base URL");
+    return new Error(said?String(said).slice(0,180):who+" answered "+res.status);
   }
 
   function orUnreachable(err){
     if(err&&err.name==="AbortError") throw err;
+    var who=hostOf();
     /* Opened straight off the disk the page has no origin to present, and the
        browser refuses the request before it leaves. Worth saying, since
        file:// is a route the README recommends for the microphone. */
     if(location.protocol==="file:")
-      throw new Error("A page opened from a file can't reach OpenRouter — serve it over http, or use Copy prompt");
-    throw new Error("Couldn't reach OpenRouter — check the connection");
+      throw new Error("A page opened from a file can't reach "+who+" — serve it over http, or use Copy prompt");
+    /* fetch() cannot tell a CORS refusal apart from the network being down —
+       both throw the same opaque failure — so the honest answer names both. */
+    throw new Error("Couldn't reach "+who+" — check the connection, or it may not allow requests from a browser");
   }
 
   /* One round trip, waited out in full. Takes a conversation rather than a
      lone prompt, because a chat turn is several messages and a notes round is
      the degenerate case of one. */
   function orAsk(model,messages,signal){
-    return fetch(OR_CHAT,{
+    return fetch(chatUrl(),{
       method:"POST", signal:signal, headers:orHeaders(),
       body:JSON.stringify({model:model,messages:messages})
     }).then(function(res){
@@ -3143,27 +3199,12 @@
     return out;
   }
 
-  /* Standing instructions are a system prompt and have been all along, so that
-     is where they go. Consecutive turns in one role are folded together: some
-     models refuse two of the same in a row. */
-  function chatMessages(id){
-    var raw=turnsFor(id), out=[];
-    raw.forEach(function(m){
-      var last=out[out.length-1];
-      if(last&&last.role===m.role) last.content+="\n\n"+m.content;
-      else out.push({role:m.role,content:m.content});
-    });
-    var sys=standing.map(function(x){ return x.text; }).filter(Boolean);
-    if(sys.length) out.unshift({role:"system",content:sys.join("\n")});
-    return out;
-  }
-
   /* Streamed rather than waited out. A chat that prints nothing for twenty
      seconds reads as broken, and on a free model twenty seconds is ordinary. */
   var canStream=!!(window.ReadableStream&&window.TextDecoder);
 
   function orStream(model,messages,signal,onText){
-    return fetch(OR_CHAT,{
+    return fetch(chatUrl(),{
       method:"POST", signal:signal, headers:orHeaders(),
       body:JSON.stringify({model:model,messages:messages,stream:true})
     }).then(function(res){
@@ -3484,7 +3525,7 @@
       ? "Asking "+orModels.join(", ")+". Tap to change the key or the models."
       : apiKey
         ? "The key is saved. Choose which model it should ask."
-        : "Add an OpenRouter key and Meristem can ask for you, instead of you carrying the prompt somewhere";
+        : "Add an API key and Meristem can ask for you, instead of you carrying the prompt somewhere";
     syncSay();
     /* Only an invitation. Once a model is connected the bar names it. */
     var cb=$("connectbtn");
@@ -3494,37 +3535,73 @@
   /* ---- picking models ----
      Which models are free moves week to week, so the list is fetched rather
      than baked in. It needs no key. When the fetch fails you are left typing
-     the id yourself, which is what the box does anyway. */
-  var orCatalog=null, orCatalogWait=null;
+     the id yourself, which is what the box does anyway — a provider with no
+     public /models, or one this page can't reach at all, still works, it just
+     starts with an empty list.
 
-  function fetchCatalog(){
-    if(orCatalog) return Promise.resolve(orCatalog);
-    if(orCatalogWait) return orCatalogWait;
-    orCatalogWait=fetch(OR_LIST).then(function(r){ return r.json(); }).then(function(d){
+     Cached per base URL: switching providers in the dialog has to reach the
+     new one rather than keep showing the old catalogue. `orCatalog` (and
+     `orCatalogFor`, which base it belongs to) is the one the dialog is
+     currently drawing, and it moves to point at whichever base a call last
+     resolved for — cached or freshly fetched makes no difference to that. */
+  var orCatalogs={}, orCatalogWaits={}, orCatalog=null, orCatalogFor=null, catalogSeq=0;
+
+  function fetchOne(base){
+    if(orCatalogs[base]) return Promise.resolve(orCatalogs[base]);
+    if(orCatalogWaits[base]) return orCatalogWaits[base];
+    orCatalogWaits[base]=fetch(modelsUrl(base)).then(function(r){
+      if(!r.ok) throw new Error(String(r.status));
+      return r.json();
+    }).then(function(d){
+      /* OpenRouter's /models says what's free; a plain OpenAI-shaped one often
+         carries no `pricing` at all. Silence there is not "free" — it is
+         unknown, and the two must not be drawn the same way. */
       var list=((d&&d.data)||[]).map(function(m){
-        var p=m.pricing||{};
+        var p=m.pricing;
+        var priced=!!(p&&(p.prompt!=null||p.completion!=null));
         return {
           id:String(m.id||""),
           name:String(m.name||m.id||""),
           ctx:m.context_length|0,
-          free:parseFloat(p.prompt||0)===0&&parseFloat(p.completion||0)===0
+          priced:priced,
+          free:priced&&parseFloat(p.prompt||0)===0&&parseFloat(p.completion||0)===0
         };
       }).filter(function(m){ return m.id; });
       list.sort(function(a,b){
         /* free first, then alphabetically — the shortlist most people want is
-           at the top before they have typed anything. */
+           at the top before they have typed anything, where that shortlist
+           means anything at all. */
         if(a.free!==b.free) return a.free?-1:1;
         return a.id<b.id?-1:a.id>b.id?1:0;
       });
-      orCatalog=list; orCatalogWait=null;
+      orCatalogs[base]=list;
+      delete orCatalogWaits[base];
       return list;
     },function(){
       /* Settle on an empty catalogue rather than staying unfetched: the list
-         then says so and the box below it still takes an id. */
-      orCatalog=[]; orCatalogWait=null;
-      return orCatalog;
+         then says so and the box below it still takes an id. Not every
+         OpenAI-compatible server publishes one of these, and this page can't
+         tell a missing endpoint apart from a CORS refusal. */
+      orCatalogs[base]=[];
+      delete orCatalogWaits[base];
+      return orCatalogs[base];
     });
-    return orCatalogWait;
+    return orCatalogWaits[base];
+  }
+
+  /* Whichever call this is, it stamps the counter now, before the network is
+     asked anything. A slower request that started earlier can still resolve
+     later — typing through three base URLs fires three requests in order,
+     with no guarantee they land back in that order — so a resolution only
+     gets to move `orCatalog` if the counter still reads what it did when this
+     particular call went out. */
+  function fetchCatalog(base){
+    base=apiBase(base);
+    var seq=++catalogSeq;
+    return fetchOne(base).then(function(list){
+      if(seq===catalogSeq){ orCatalogFor=base; orCatalog=list; }
+      return list;
+    });
   }
 
   function toggleDraft(id){
@@ -3573,7 +3650,15 @@
       return;
     }
 
-    var free=$("freeonly").checked;
+    /* "Free ones only" is a claim the catalogue has to be able to back up.
+       Silent on pricing, as most providers besides OpenRouter are, it means
+       nothing here — filtering by it would just hide everything. */
+    var anyPriced=orCatalog.some(function(m){ return m.priced; });
+    var freerow=$("freerow");
+    if(freerow) freerow.classList.toggle("moot",!anyPriced);
+    $("freeonly").disabled=!anyPriced;
+    var free=anyPriced&&$("freeonly").checked;
+
     var hits=orCatalog.filter(function(m){
       if(free&&!m.free) return false;
       if(!lq) return true;
@@ -3581,15 +3666,18 @@
     });
     count.textContent=!orCatalog.length?"":hits.length?hits.length+" to choose from":"nothing matches";
 
-    hits.slice(0,60).forEach(function(m){ box.appendChild(modelRow(m.id,
-      (m.free?"free":"paid")+(m.ctx?" · "+Math.round(m.ctx/1000)+"k context":""),
-      draftModels.indexOf(m.id)>=0)); });
+    hits.slice(0,60).forEach(function(m){
+      var bits=[];
+      if(m.priced) bits.push(m.free?"free":"paid");
+      if(m.ctx) bits.push(Math.round(m.ctx/1000)+"k context");
+      box.appendChild(modelRow(m.id,bits.join(" · "),draftModels.indexOf(m.id)>=0));
+    });
     if(hits.length) return;
 
-    /* An id the list doesn't carry is still usable — new models land on
-       OpenRouter before anything else knows about it, and the list itself may
-       not have arrived at all. */
-    if(q.indexOf("/")>0) box.appendChild(modelRow(q,"use this id as typed",draftModels.indexOf(q)>=0));
+    /* An id the list doesn't carry is still usable — a model can land on a
+       provider before anything else knows about it, the list itself may not
+       have arrived at all, and not every id looks like `vendor/model`. */
+    if(q) box.appendChild(modelRow(q,"use this id as typed",draftModels.indexOf(q)>=0));
     var say=document.createElement("div");
     say.className="mrow"; say.style.cursor="default";
     say.textContent=orCatalog.length
@@ -3604,20 +3692,35 @@
     b.type="button";
     var i=document.createElement("span"); i.className="id"; i.textContent=id;
     var m=document.createElement("span"); m.className="meta";
-    m.textContent=(on?"chosen · ":"")+meta;
+    m.textContent=[on?"chosen":"",meta].filter(Boolean).join(" · ");
     b.appendChild(i); b.appendChild(m);
     b.addEventListener("click",function(){ toggleDraft(id); });
     return b;
   }
 
+  /* The draft base URL live in the field, not just in `draftBase`, so typing
+     is what drives a refetch — `draftBase` only exists to remember it between
+     keystrokes and the eventual Save. */
+  function fetchDraftCatalog(){
+    var base=apiBase($("baseurl").value);
+    draftBase=base;
+    orCatalog=null;
+    drawModelList();
+    fetchCatalog(base).then(function(){
+      if(orCatalogFor===base&&$("keyin").classList.contains("on")) drawModelList();
+    });
+  }
+
   function openKey(){
     draftModels=orModels.slice();
+    draftBase=baseUrl;
     $("keytxt").value=apiKey;
+    $("baseurl").value=baseUrl===DEFAULT_BASE?"":baseUrl;
     $("modelq").value="";
     drawChips(); drawModelList();
     openOverlay($("keyin"),apiKey?$("modelq"):$("keytxt"));
-    fetchCatalog().then(function(){
-      if($("keyin").classList.contains("on")) drawModelList();
+    fetchCatalog(baseUrl).then(function(){
+      if(orCatalogFor===apiBase(baseUrl)&&$("keyin").classList.contains("on")) drawModelList();
     });
   }
 
@@ -3628,21 +3731,32 @@
     if(Date.now()-overlayAt<450) return;
     if(e.target===$("keyin")) closeOverlay($("keyin"));
   });
+  var baseTimer=null;
+  $("baseurl").addEventListener("input",function(){
+    /* A refetch on every keystroke would fire one request per character —
+       wait for a pause, the way search boxes do. */
+    clearTimeout(baseTimer);
+    baseTimer=setTimeout(fetchDraftCatalog,500);
+  });
   $("modelq").addEventListener("input",drawModelList);
   $("freeonly").addEventListener("change",drawModelList);
   $("modelq").addEventListener("keydown",function(e){
     if(e.key!=="Enter") return;
     e.preventDefault();
+    /* `vendor/model` is OpenRouter's shape, not everyone's — a plain OpenAI
+       server names a model "gpt-4o-mini", no slash in sight. */
     var v=$("modelq").value.trim();
-    if(v.indexOf("/")>0){ toggleDraft(v); $("modelq").value=""; drawModelList(); }
+    if(v){ toggleDraft(v); $("modelq").value=""; drawModelList(); }
   });
   $("keysave").addEventListener("click",function(){
+    clearTimeout(baseTimer);
     /* An id typed in the box and never tapped is still a choice. */
     var typed=($("modelq").value||"").trim();
-    if(typed.indexOf("/")>0&&draftModels.indexOf(typed)<0&&draftModels.length<MODEL_CAP)
+    if(typed&&draftModels.indexOf(typed)<0&&draftModels.length<MODEL_CAP)
       draftModels.push(typed);
 
     apiKey=($("keytxt").value||"").trim();
+    baseUrl=apiBase($("baseurl").value);
     orModels=draftModels.slice();
     saveKey();
     closeOverlay($("keyin"));
@@ -3655,9 +3769,10 @@
                (orModels.length>1?" and "+(orModels.length-1)+" more":"")+" from now on");
   });
   $("keyforget").addEventListener("click",function(){
-    apiKey=""; orModels=[]; draftModels=[];
+    clearTimeout(baseTimer);
+    apiKey=""; baseUrl=DEFAULT_BASE; orModels=[]; draftModels=[]; draftBase=DEFAULT_BASE;
     saveKey();
-    $("keytxt").value=""; $("modelq").value="";
+    $("keytxt").value=""; $("baseurl").value=""; $("modelq").value="";
     drawChips(); drawModelList();
     closeOverlay($("keyin"));
     syncAsk();
@@ -3706,11 +3821,11 @@
     /* Once several pages are going out in full, the context setting has nothing
        left to decide. */
     $("ctxbar").hidden=inTree()||!deep||spread>1;
-    $("ctxbar").textContent="Context: "+ctxMode;
+    $("ctxbar").textContent="Context: "+CTX_LABEL[ctxMode];
     $("ctxbar").title=
-      ctxMode==="path"?"Sends the chain from the original down to this page":
-      ctxMode==="page"?"Sends this page only":
-                       "Sends every page in the thread";
+      ctxMode==="path"?"Sends the chain from the original down to this page, as the model's own turn-by-turn memory — the normal way a chat remembers.":
+      ctxMode==="page"?"No memory: this message goes alone, with nothing said before it. Tap to bring the conversation back.":
+                       "Sends the chain down to this page, plus every other branch in the thread.";
   }
   $("scopebar").addEventListener("click",function(e){
     e.stopPropagation();
@@ -3792,6 +3907,7 @@
   $("ctxbar").addEventListener("click",function(e){
     e.stopPropagation();
     ctxMode=CTX[(CTX.indexOf(ctxMode)+1)%CTX.length];
+    saveCtx();
     syncCtx(); refresh();
   });
 
@@ -4027,6 +4143,24 @@
     try{
       var v=store.getItem(SCOPE_KEY);
       if(v==="page"||v==="thread") noteScope=v;
+    }catch(e){}
+  }
+
+  /* Which conversation memory a round carries, same pattern as the scope
+     above — a working preference, not part of any one thread, so it outlives
+     "New text" and travels with the browser. */
+  var CTX_KEY="meristem.ctx.v1";
+  function saveCtx(){
+    var store=storage();
+    if(!store) return;
+    try{ store.setItem(CTX_KEY,ctxMode); }catch(e){}
+  }
+  function loadCtx(){
+    var store=storage();
+    if(!store) return;
+    try{
+      var v=store.getItem(CTX_KEY);
+      if(CTX.indexOf(v)>=0) ctxMode=v;
     }catch(e){}
   }
   function restore(){
@@ -5186,6 +5320,7 @@
 
   loadScope();
   loadCompare();
+  loadCtx();
   loadKey();
   syncAsk();
   syncMode();
